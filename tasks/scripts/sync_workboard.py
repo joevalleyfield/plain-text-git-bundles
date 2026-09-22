@@ -8,6 +8,7 @@ Managed sections:
 - inbox
 - recent closures
 """
+
 from __future__ import annotations
 
 import re
@@ -324,7 +325,9 @@ def _format_edge_note(name: str, refs: list[str]) -> str:
     return f"{name} {rendered}"
 
 
-def build_relationship_tree(roots: list[str], open_tasks: list[TaskRecord], closed_tasks: list[TaskRecord]) -> str:
+def build_relationship_tree(
+    roots: list[str], open_tasks: list[TaskRecord], closed_tasks: list[TaskRecord]
+) -> str:
     open_map = {task.id: task for task in open_tasks}
     known_map = {task.id: task for task in [*open_tasks, *closed_tasks]}
     children_by_parent: dict[str, list[str]] = {}
@@ -351,9 +354,7 @@ def build_relationship_tree(roots: list[str], open_tasks: list[TaskRecord], clos
 
         seen.add(task_id)
         blocked_by_set = set(task.blocked_by)
-        resolved_dependencies = [
-            ref for ref in task.depends_on if ref not in blocked_by_set
-        ]
+        resolved_dependencies = [ref for ref in task.depends_on if ref not in blocked_by_set]
         annotations = [
             _format_edge_note("depends on", resolved_dependencies),
             _format_edge_note("blocked by", task.blocked_by),
@@ -385,13 +386,7 @@ def replace_marker_block(content: str, start_marker: str, end_marker: str, repla
     end_idx = content.find(end_marker)
     if start_idx == -1 or end_idx == -1 or end_idx < start_idx:
         return content
-    return (
-        content[: start_idx + len(start_marker)]
-        + "\n"
-        + replacement
-        + "\n"
-        + content[end_idx:]
-    )
+    return content[: start_idx + len(start_marker)] + "\n" + replacement + "\n" + content[end_idx:]
 
 
 def refresh_last_sync(content: str, sync_date: str) -> str:

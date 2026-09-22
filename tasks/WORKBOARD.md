@@ -6,7 +6,7 @@
 ## 0. Focus Queue
 
 <!-- WORKBOARD:NOW:START -->
-- **[`260922-scaffold-project-disciplines`]** Task discipline modeled after `../toas` is operational (`tasks/` with `open/`, `closed/`, `WORKBOARD.md`, and `sync_workboard.py`). Commit discipline ...
+- _No open tasks._
 <!-- WORKBOARD:NOW:END -->
 
 ## 1. Relationship Tree
@@ -16,7 +16,7 @@
 <!-- WORKBOARD:RELATIONSHIP_ROOTS:END -->
 
 <!-- WORKBOARD:RELATIONSHIP_TREE:START -->
-- `260922-scaffold-project-disciplines`: Task discipline modeled after `../toas` is operational (`tasks/` with `open/`, `closed/`, `WORKBOARD.md`, and `sync_workboard.py`). Commit discipline ...
+- Warning: root `260922-scaffold-project-disciplines` not rendered (closed task).
 <!-- WORKBOARD:RELATIONSHIP_TREE:END -->
 
 ## 2. Inbox
@@ -28,5 +28,5 @@
 ## 3. Recent Closures
 
 <!-- WORKBOARD:CLOSED:START -->
-- _No closed tasks._
+- **[`260922-scaffold-project-disciplines`]** - `uv run pytest`: 5 passed in 0.04s with 100% line and branch coverage (`--cov-fail-under=100`).
 <!-- WORKBOARD:CLOSED:END -->
