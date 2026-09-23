@@ -6,7 +6,7 @@
 ## 0. Focus Queue
 
 <!-- WORKBOARD:NOW:START -->
-- _No open tasks._
+- **[`260922-bdd-acceptance-suite`]** A comprehensive, executable BDD specification suite: **Feature Scenarios (`tests/features/`)**: `delta_transfer.feature`: Packaging a branch delta (`m...
 <!-- WORKBOARD:NOW:END -->
 
 ## 1. Relationship Tree
