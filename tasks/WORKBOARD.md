@@ -6,7 +6,7 @@
 ## 0. Focus Queue
 
 <!-- WORKBOARD:NOW:START -->
-- _No open tasks._
+- **[`260922-git-repo-io`]** A dedicated module `src/ptbundle/repo.py` implementing: **Repository Discovery (`GitRepo`)**: Find Git repository root from any working directory path...
 <!-- WORKBOARD:NOW:END -->
 
 ## 1. Relationship Tree
