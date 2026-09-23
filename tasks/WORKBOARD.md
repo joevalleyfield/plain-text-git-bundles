@@ -6,7 +6,7 @@
 ## 0. Focus Queue
 
 <!-- WORKBOARD:NOW:START -->
-- _No open tasks._
+- **[`260922-bundle-manifest-engine`]** A dedicated module `src/ptbundle/manifest.py` implementing: **Manifest Text Specification (`manifest.txt`)**: Header identifying the format version: `...
 <!-- WORKBOARD:NOW:END -->
 
 ## 1. Relationship Tree
