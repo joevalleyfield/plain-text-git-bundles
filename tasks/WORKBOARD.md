@@ -6,7 +6,7 @@
 ## 0. Focus Queue
 
 <!-- WORKBOARD:NOW:START -->
-- **[`260922-pack-unpack-orchestrators`]** Dedicated orchestrators in `src/ptbundle/pack.py` and `src/ptbundle/unpack.py`, fully wired into `src/ptbundle/cli.py`:  **Pack Orchestrator (`src/ptb...
+- _No open tasks._
 <!-- WORKBOARD:NOW:END -->
 
 ## 1. Relationship Tree
@@ -29,6 +29,7 @@
 
 <!-- WORKBOARD:CLOSED:START -->
 - **[`260922-scaffold-project-disciplines`]** - `uv run pytest`: 5 passed in 0.04s with 100% line and branch coverage (`--cov-fail-under=100`).
+- **[`260922-pack-unpack-orchestrators`]** - `uv run pytest`: 55 passed in 1.46s with 100% line and branch coverage (`--cov-fail-under=100`).
 - **[`260922-inspection-quarantine-policy`]** - `uv run pytest`: 44 passed in 0.22s with 100% line and branch coverage (`--cov-fail-under=100`).
 - **[`260922-git-repo-io`]** - `uv run pytest`: 49 passed in 0.60s with 100% line and branch coverage (`--cov-fail-under=100`).
 - **[`260922-git-object-model`]** - `uv run pytest`: 27 passed in 0.18s with 100% line and branch coverage (`--cov-fail-under=100`).

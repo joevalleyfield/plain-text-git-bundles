@@ -3,7 +3,7 @@ FKA:
 AKA: pack and unpack orchestrators; cli integration; end-to-end bundle creation and ingress
 Legacy index:
 
-keywords: pack, unpack, cli, implementation, active, usability, correctness
+keywords: pack, unpack, cli, implementation, closed, usability, correctness
 
 Parent:
 Depends on: `260922-git-object-model`, `260922-bundle-manifest-engine`, `260922-inspection-quarantine-policy`, `260922-git-repo-io`
@@ -17,13 +17,12 @@ Connect domain object models, manifest engine, inspection policies, and reposito
 
 ## Current Reality
 
-All foundational building blocks are implemented and individually verified:
-- `objects.py`: Bit-exact Git object models and canonical plain-text serializers.
-- `manifest.py`: `manifest.txt` parser, serializer, and validation.
-- `policy.py`: Text vs. binary classification, extension/signature whitelisting, and quarantine management.
-- `repo.py`: Git repository discovery, delta traversal, batch extraction, loose object injection, and reference updates.
-
-However, `src/ptbundle/cli.py` still contains stub implementations that print placeholder messages, and there are no orchestrator modules tying these pieces together into cohesive `pack` and `unpack` workflows.
+The `pack` and `unpack` orchestrators and CLI workflows are fully implemented and verified:
+- `pack_bundle` (`src/ptbundle/pack.py`) discovers delta objects and boundary prerequisites, partitions objects into `commits/`, `trees/`, and `blobs/`, routes non-whitelisted binaries to `quarantine/` with `quarantine-manifest.txt`, and generates `manifest.txt`.
+- `unpack_bundle` (`src/ptbundle/unpack.py`) executes a two-phase ingress pipeline: verifies prerequisites, cryptographically validates all commits, trees, and blobs against their expected OIDs, reconciles quarantined objects via `--sidechannel`, injects loose objects into `.git/objects/xx/xxxx`, and atomically updates target references.
+- `src/ptbundle/cli.py` routes `pack` and `unpack` subcommands to the orchestrators, formats human-auditable terminal output, and handles errors with exit codes.
+- 100% statement and branch test coverage enforced via `pytest-cov`.
+- Zero external runtime dependencies (Python standard library only).
 
 ## Desired Reality
 
@@ -64,10 +63,11 @@ Dedicated orchestrators in `src/ptbundle/pack.py` and `src/ptbundle/unpack.py`, 
 
 ## Gap Analysis
 
-- Need `src/ptbundle/pack.py` orchestrating delta emission, directory partitioning, and manifest generation.
-- Need `src/ptbundle/unpack.py` orchestrating prerequisite validation, cryptographic reconstruction, loose object injection, sidechannel reconciliation, and ref updates.
-- Need to update `src/ptbundle/cli.py` to invoke the orchestrators and format terminal output.
-- Need unit and integration tests in `tests/test_pack.py`, `tests/test_unpack.py`, and updated `tests/test_cli.py`.
+All gaps closed:
+- `src/ptbundle/pack.py` and `src/ptbundle/unpack.py` authored with complete typing and docstrings.
+- `src/ptbundle/cli.py` wired to invoke orchestrators and report progress.
+- `tests/test_pack.py`, `tests/test_unpack.py`, and `tests/test_cli.py` authored with 11 comprehensive tests.
+- 100.00% statement and branch coverage maintained across `src/ptbundle`.
 
 ## Known Facts / Assumptions / Unknowns
 
@@ -85,38 +85,41 @@ Dedicated orchestrators in `src/ptbundle/pack.py` and `src/ptbundle/unpack.py`, 
 
 ## Investigations
 
-- Verify behavior when packing a clean branch with 100% text files vs. mixed text and images.
-- Verify unpack into a detached-HEAD or fresh repository clone.
+- Verified round-trip delta export from Repo A and import into Repo B with mixed text, whitelisted PNG, and quarantined binary payload. Verified that git checkout and diff match bit-for-bit.
+- Verified that corrupted commits, trees, or blobs are detected and rejected prior to ref update.
 
 ## Models / Forecasts / Risks
 
-- **Partial Ingress Corruption**: If an object fails cryptographic verification halfway through unpacking, loose objects written up to that point remain in `.git/objects` (unreferenced), but the target ref must NOT be updated. This ensures Git repository consistency is always preserved.
+- **Partial Ingress Corruption**: Resolved by two-phase verification: every object is validated before injection, and target refs are updated only after all objects are safely written.
 
 ## Transformations
 
-1. Create `src/ptbundle/pack.py` implementing `pack_bundle`.
-2. Create `src/ptbundle/unpack.py` implementing `unpack_bundle` and `UnpackResult`.
-3. Update `src/ptbundle/cli.py` to route `pack` and `unpack` commands to the orchestrators.
-4. Create `tests/test_pack.py` and `tests/test_unpack.py`, and update `tests/test_cli.py`.
-5. Update `tasks/open/260922-pack-unpack-orchestrators.md` with progress stitching.
+1. Created `src/ptbundle/pack.py` implementing `pack_bundle`.
+2. Created `src/ptbundle/unpack.py` implementing `unpack_bundle` and `UnpackResult`.
+3. Updated `src/ptbundle/cli.py` to route `pack` and `unpack` commands to the orchestrators.
+4. Created `tests/test_pack.py` and `tests/test_unpack.py`, and updated `tests/test_cli.py`.
+5. Moved task from `tasks/open/260922-pack-unpack-orchestrators.md` to `tasks/closed/260922-pack-unpack-orchestrators.md`.
+6. Refreshed workboard with `uv run python tasks/scripts/sync_workboard.py`.
 
 ## Evidence
 
-- `uv run pytest`: 100% statement and branch coverage across all modules.
-- `uv run ruff check .` and `uv run ruff format --check .`: Clean.
-- `uv run mypy src tests`: Clean type check.
-- Real Git repository round-trip: pack a commit range from repo A, unpack into repo B, and verify `git log` and `git diff` match byte-for-byte.
+- `uv run pytest`: 55 passed in 1.46s with 100% line and branch coverage (`--cov-fail-under=100`).
+- `uv run ruff check .`: Clean (0 errors).
+- `uv run ruff format --check .`: 28 files already formatted.
+- `uv run mypy src tests`: Success: no issues found in 16 source files.
+- Full Git roundtrip verified: `main..feature` packed from Repo A and unpacked into Repo B with matching files, checkout, and clean `git fsck`.
 
 ## Decisions
 
 - **Two-phase unpack**: Verify all objects first, then write loose objects, then update refs.
 - **Strict quarantine requirement**: Missing quarantined binaries without `--sidechannel` blocks ref updates, protecting the integrity of the commit graph.
+- **Tree formatting**: Trees are written in human-readable `ls-tree` plain text without null bytes.
 
 ## Open Fronts
 
-- None.
+- None. Ready for Milestone 6 (BDD Acceptance Suite).
 
 ## Next Actions
 
-1. Review task with thread peer.
-2. Begin TDD cycle: write tests and implement `pack.py`, `unpack.py`, and CLI integration.
+- Fold closure into commit `feat(cli): implement pack and unpack orchestrators`.
+- Advance `main` bookmark in `jj`.
