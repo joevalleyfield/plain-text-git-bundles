@@ -6,7 +6,7 @@
 ## 0. Focus Queue
 
 <!-- WORKBOARD:NOW:START -->
-- **[`260922-bundle-manifest-engine`]** A dedicated module `src/ptbundle/manifest.py` implementing: **Manifest Text Specification (`manifest.txt`)**: Header identifying the format version: `...
+- _No open tasks._
 <!-- WORKBOARD:NOW:END -->
 
 ## 1. Relationship Tree
@@ -30,4 +30,5 @@
 <!-- WORKBOARD:CLOSED:START -->
 - **[`260922-scaffold-project-disciplines`]** - `uv run pytest`: 5 passed in 0.04s with 100% line and branch coverage (`--cov-fail-under=100`).
 - **[`260922-git-object-model`]** - `uv run pytest`: 27 passed in 0.18s with 100% line and branch coverage (`--cov-fail-under=100`).
+- **[`260922-bundle-manifest-engine`]** - `uv run pytest`: 36 passed in 0.20s with 100% line and branch coverage (`--cov-fail-under=100`).
 <!-- WORKBOARD:CLOSED:END -->
