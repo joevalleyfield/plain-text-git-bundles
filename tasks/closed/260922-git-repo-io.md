@@ -3,7 +3,7 @@ FKA:
 AKA: git repo io; git repository interface; loose object injection; delta traversal
 Legacy index:
 
-keywords: repo, implementation, active, contract, correctness
+keywords: repo, implementation, closed, contract, correctness
 
 Parent:
 Depends on: `260922-git-object-model`, `260922-bundle-manifest-engine`, `260922-inspection-quarantine-policy`
@@ -17,11 +17,14 @@ Implement Git repository discovery, revision delta traversal (`git rev-list`), l
 
 ## Current Reality
 
-The foundational models for Git objects (`objects.py`), transfer manifests (`manifest.py`), and quarantine policies (`policy.py`) are fully implemented and tested. However, `ptbundle` currently has no interface to communicate with live Git repositories:
-- Cannot discover repository roots or `.git` paths.
-- Cannot query Git for delta object sets (`git rev-list --objects`, `git rev-list --boundary`).
-- Cannot extract objects from repository object databases or inject reconstituted loose objects into `.git/objects`.
-- Cannot validate prerequisite commits or update destination branch references.
+The Git repository interface and object I/O engine are fully implemented and verified in `src/ptbundle/repo.py`:
+- `GitRepo` provides upward repository discovery supporting standard `.git` directories and worktree/submodule `gitdir:` pointer files.
+- `discover_delta` extracts revision deltas, resolves target tips and references, discovers boundary prerequisite commits via `git rev-list --boundary`, and streams object metadata and raw payloads in a single pass via `git cat-file --batch`.
+- `verify_prerequisites` verifies base commit existence before ingress operations.
+- `inject_loose_object` injects reconstituted Git objects directly into `.git/objects/xx/xxxx` using zero-dependency `zlib.compress`, written atomically via temporary files (`os.replace`) and skipped idempotently if already present.
+- `update_reference` updates or creates repository references safely using porcelain `git update-ref`.
+- 100% statement and branch test coverage enforced via `pytest-cov`.
+- Zero external runtime dependencies (Python standard library only).
 
 ## Desired Reality
 
@@ -49,10 +52,10 @@ A dedicated module `src/ptbundle/repo.py` implementing:
 
 ## Gap Analysis
 
-- Need `GitRepo` helper encapsulating Git command execution and `.git` path resolution.
-- Need robust parser for `git rev-list --objects` and `git rev-list --boundary`.
-- Need high-performance, atomic loose object injector that directly writes `.git/objects/xx/<38-chars>` with zlib compression.
-- Need tests exercising delta discovery, prerequisite checks, object injection, and ref updates against real Git repositories.
+All gaps closed:
+- `src/ptbundle/repo.py` implemented with complete typing and docstrings.
+- `tests/test_repo.py` implemented with 5 integration and unit tests covering repo discovery, worktrees, deltas, cat-file batch streaming, loose object injection, fsck validation, and reference updates.
+- 100.00% statement and branch coverage maintained across `src/ptbundle`.
 
 ## Known Facts / Assumptions / Unknowns
 
@@ -71,35 +74,39 @@ A dedicated module `src/ptbundle/repo.py` implementing:
 
 ## Investigations
 
-- Verify behavior when revision range has no boundary (e.g. initial branch commit or full repository export). The prerequisites list should be empty.
-- Verify behavior when writing an object that already exists in `.git/objects`. It should be skipped safely without error.
+- Verified that `git cat-file --batch` streams objects with exact `<size>` byte payloads and trailing newline delimiters without subprocess spawning per object.
+- Verified that `git fsck` confirms repository integrity after loose object injection.
 
 ## Models / Forecasts / Risks
 
-- **Corrupted Loose Object Writes**: Writing directly to the destination path could leave partial files on disk if interrupted. Writing to a temporary file in the same filesystem (`.git/objects/tmp_...`) followed by `os.replace` guarantees atomicity.
+- **Corrupted Loose Object Writes**: Prevented by atomic temporary file creation in `.git/objects/` followed by `os.replace`.
 
 ## Transformations
 
-1. Create `src/ptbundle/repo.py` implementing `GitRepo`, `DeltaSpec`, `discover_delta`, `read_git_objects`, `inject_loose_object`, `verify_prerequisites`, and `update_reference`.
-2. Create unit and integration tests in `tests/test_repo.py` with 100% statement and branch test coverage.
-3. Update `tasks/open/260922-git-repo-io.md` with progress stitching.
+1. Created `src/ptbundle/repo.py` implementing `GitRepo`, `DeltaSpec`, `DeltaObject`, `discover_delta`, `verify_prerequisites`, `inject_loose_object`, and `update_reference`.
+2. Created integration tests in `tests/test_repo.py` covering all features and error states.
+3. Formatted and linted code with `ruff check` and `ruff format`. Verified strict typing with `mypy src tests`.
+4. Moved task from `tasks/open/260922-git-repo-io.md` to `tasks/closed/260922-git-repo-io.md`.
+5. Refreshed workboard with `uv run python tasks/scripts/sync_workboard.py`.
 
 ## Evidence
 
-- `uv run pytest`: 100% statement and branch coverage on `src/ptbundle/repo.py`.
-- `uv run ruff check .` and `uv run ruff format --check .`: Clean.
-- `uv run mypy src tests`: Clean type check.
+- `uv run pytest`: 49 passed in 0.60s with 100% line and branch coverage (`--cov-fail-under=100`).
+- `uv run ruff check .`: Clean (0 errors).
+- `uv run ruff format --check .`: 23 files already formatted.
+- `uv run mypy src tests`: Success: no issues found in 12 source files.
 
 ## Decisions
 
-- **Direct zlib loose object writes**: Use Python `zlib` to write directly to `.git/objects/xx/` rather than shelling out to `git hash-object -w` per object. This is significantly faster and uses zero runtime dependencies.
-- **Porcelain ref updates**: Use `git update-ref` for updating branches and tags to ensure reflog updates and lockfile safety are respected.
+- **Single-pass batch extraction**: Used `git cat-file --batch` to stream all delta object payloads in one pipeline, avoiding subprocess spawning per object.
+- **Direct zlib loose object writes**: Used Python `zlib` to write directly to `.git/objects/xx/` via temporary files and `os.replace` rather than shelling out to `git hash-object -w`.
+- **Porcelain ref updates**: Used `git update-ref` for updating branches and tags to ensure reflog updates and lockfile safety are respected.
 
 ## Open Fronts
 
-- None.
+- None. Ready for Milestone 5 (CLI Orchestrators).
 
 ## Next Actions
 
-1. Review task with thread peer.
-2. Begin TDD cycle: write tests in `tests/test_repo.py` and implement `src/ptbundle/repo.py`.
+- Fold closure into commit `feat(repo): implement git repository interface and object io engine`.
+- Advance `main` bookmark in `jj`.

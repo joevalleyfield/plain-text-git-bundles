@@ -6,7 +6,7 @@
 ## 0. Focus Queue
 
 <!-- WORKBOARD:NOW:START -->
-- **[`260922-git-repo-io`]** A dedicated module `src/ptbundle/repo.py` implementing: **Repository Discovery (`GitRepo`)**: Find Git repository root from any working directory path...
+- _No open tasks._
 <!-- WORKBOARD:NOW:END -->
 
 ## 1. Relationship Tree
@@ -30,6 +30,7 @@
 <!-- WORKBOARD:CLOSED:START -->
 - **[`260922-scaffold-project-disciplines`]** - `uv run pytest`: 5 passed in 0.04s with 100% line and branch coverage (`--cov-fail-under=100`).
 - **[`260922-inspection-quarantine-policy`]** - `uv run pytest`: 44 passed in 0.22s with 100% line and branch coverage (`--cov-fail-under=100`).
+- **[`260922-git-repo-io`]** - `uv run pytest`: 49 passed in 0.60s with 100% line and branch coverage (`--cov-fail-under=100`).
 - **[`260922-git-object-model`]** - `uv run pytest`: 27 passed in 0.18s with 100% line and branch coverage (`--cov-fail-under=100`).
 - **[`260922-bundle-manifest-engine`]** - `uv run pytest`: 36 passed in 0.20s with 100% line and branch coverage (`--cov-fail-under=100`).
 <!-- WORKBOARD:CLOSED:END -->
