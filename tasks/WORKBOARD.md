@@ -6,7 +6,7 @@
 ## 0. Focus Queue
 
 <!-- WORKBOARD:NOW:START -->
-- _No open tasks._
+- **[`260922-inspection-quarantine-policy`]** A dedicated module `src/ptbundle/policy.py` implementing: **Blob Classification (`BlobClassification`)**: `TEXT`: Valid UTF-8, no null bytes (`\0`). T...
 <!-- WORKBOARD:NOW:END -->
 
 ## 1. Relationship Tree
