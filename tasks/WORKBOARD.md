@@ -6,17 +6,17 @@
 ## 0. Focus Queue
 
 <!-- WORKBOARD:NOW:START -->
-- **[`260922-git-object-model`]** A dedicated module `src/ptbundle/objects.py` (and supporting submodules if appropriate) providing: **Canonical Git OID Hashing**: Computes canonical G...
+- _No open tasks._
 <!-- WORKBOARD:NOW:END -->
 
 ## 1. Relationship Tree
 
 <!-- WORKBOARD:RELATIONSHIP_ROOTS:START -->
-`260922-scaffold-project-disciplines`
+`260922-git-object-model`
 <!-- WORKBOARD:RELATIONSHIP_ROOTS:END -->
 
 <!-- WORKBOARD:RELATIONSHIP_TREE:START -->
-- Warning: root `260922-scaffold-project-disciplines` not rendered (closed task).
+- Warning: root `260922-git-object-model` not rendered (closed task).
 <!-- WORKBOARD:RELATIONSHIP_TREE:END -->
 
 ## 2. Inbox
@@ -29,4 +29,5 @@
 
 <!-- WORKBOARD:CLOSED:START -->
 - **[`260922-scaffold-project-disciplines`]** - `uv run pytest`: 5 passed in 0.04s with 100% line and branch coverage (`--cov-fail-under=100`).
+- **[`260922-git-object-model`]** - `uv run pytest`: 27 passed in 0.18s with 100% line and branch coverage (`--cov-fail-under=100`).
 <!-- WORKBOARD:CLOSED:END -->
