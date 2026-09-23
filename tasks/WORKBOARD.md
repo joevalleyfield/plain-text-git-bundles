@@ -6,7 +6,7 @@
 ## 0. Focus Queue
 
 <!-- WORKBOARD:NOW:START -->
-- _No open tasks._
+- **[`260922-git-object-model`]** A dedicated module `src/ptbundle/objects.py` (and supporting submodules if appropriate) providing: **Canonical Git OID Hashing**: Computes canonical G...
 <!-- WORKBOARD:NOW:END -->
 
 ## 1. Relationship Tree
