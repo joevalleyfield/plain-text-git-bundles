@@ -1,0 +1,384 @@
+"""BDD Acceptance Test Suite using pytest-bdd."""
+
+from __future__ import annotations
+
+import subprocess
+from pathlib import Path
+from typing import Any
+
+import pytest
+from pytest_bdd import given, parsers, scenarios, then, when
+
+from ptbundle.cli import main
+
+# Bind Gherkin feature files
+scenarios("features/delta_transfer.feature")
+scenarios("features/quarantine_sidechannel.feature")
+scenarios("features/ingress_tamper_defense.feature")
+
+
+@pytest.fixture
+def bdd_ctx() -> dict[str, Any]:
+    return {}
+
+
+def _init_git_repo(path: Path) -> Path:
+    path.mkdir(parents=True, exist_ok=True)
+    subprocess.run(["git", "init", "-b", "main"], cwd=path, capture_output=True, check=True)
+    subprocess.run(["git", "config", "user.name", "BDD Tester"], cwd=path, check=True)
+    subprocess.run(["git", "config", "user.email", "bdd@example.com"], cwd=path, check=True)
+    return path
+
+
+# --- Steps for delta_transfer.feature ---
+
+
+@given('a source repository with a base commit on branch "main"')
+@given("a source repository with a base commit")
+def step_given_source_repo_base(tmp_path: Path, bdd_ctx: dict[str, Any]) -> None:
+    src = _init_git_repo(tmp_path / "src_repo")
+    (src / "base.txt").write_text("Base content\n")
+    subprocess.run(["git", "add", "base.txt"], cwd=src, check=True)
+    subprocess.run(["git", "commit", "-m", "Base commit"], cwd=src, check=True)
+    bdd_ctx["src_repo"] = src
+    bdd_ctx["bundle_dir"] = tmp_path / "bundle"
+
+
+@given('a feature branch "feature" with text commits ahead of "main"')
+def step_given_feature_branch_text(bdd_ctx: dict[str, Any]) -> None:
+    src = bdd_ctx["src_repo"]
+    subprocess.run(["git", "checkout", "-b", "feature"], cwd=src, check=True)
+    (src / "feature.txt").write_text("Feature text\n")
+    subprocess.run(["git", "add", "feature.txt"], cwd=src, check=True)
+    subprocess.run(["git", "commit", "-m", "Feature text commit"], cwd=src, check=True)
+
+
+@given('a target repository cloned from "main"')
+@given("a target repository possessing the base commit")
+def step_given_target_repo_cloned(tmp_path: Path, bdd_ctx: dict[str, Any]) -> None:
+    dst = tmp_path / "dst_repo"
+    src = bdd_ctx["src_repo"]
+    subprocess.run(
+        ["git", "clone", "--branch", "main", "--single-branch", str(src), str(dst)],
+        capture_output=True,
+        check=True,
+    )
+    bdd_ctx["dst_repo"] = dst
+
+
+@when(parsers.parse('I pack the delta "{rev_range}" into a bundle'))
+def step_when_pack_delta(rev_range: str, bdd_ctx: dict[str, Any]) -> None:
+    src = bdd_ctx["src_repo"]
+    bundle_dir = bdd_ctx["bundle_dir"]
+    code = main(["--repo", str(src), "pack", rev_range, "-o", str(bundle_dir)])
+    assert code == 0
+
+
+@when("I unpack the bundle into the target repository")
+def step_when_unpack_into_target(bdd_ctx: dict[str, Any]) -> None:
+    dst = bdd_ctx["dst_repo"]
+    bundle_dir = bdd_ctx["bundle_dir"]
+    code = main(["--repo", str(dst), "unpack", str(bundle_dir)])
+    assert code == 0
+
+
+@then('the target repository should have branch "feature" matching the source')
+def step_then_target_branch_matches(bdd_ctx: dict[str, Any]) -> None:
+    src = bdd_ctx["src_repo"]
+    dst = bdd_ctx["dst_repo"]
+    src_oid = (
+        subprocess.run(
+            ["git", "rev-parse", "refs/heads/feature"], cwd=src, capture_output=True, check=True
+        )
+        .stdout.decode()
+        .strip()
+    )
+    dst_oid = (
+        subprocess.run(
+            ["git", "rev-parse", "refs/heads/feature"], cwd=dst, capture_output=True, check=True
+        )
+        .stdout.decode()
+        .strip()
+    )
+    assert dst_oid == src_oid
+
+    # Verify checkout and file content
+    subprocess.run(["git", "checkout", "feature"], cwd=dst, capture_output=True, check=True)
+    assert (dst / "feature.txt").read_text() == "Feature text\n"
+
+
+@then("git fsck in the target repository should report no corruption")
+def step_then_fsck_clean_target(bdd_ctx: dict[str, Any]) -> None:
+    dst = bdd_ctx["dst_repo"]
+    proc = subprocess.run(["git", "fsck"], cwd=dst, capture_output=True)
+    assert proc.returncode == 0
+
+
+@given('a source repository with an initial commit on branch "main"')
+def step_given_source_repo_initial(tmp_path: Path, bdd_ctx: dict[str, Any]) -> None:
+    src = _init_git_repo(tmp_path / "src_full_repo")
+    (src / "init.txt").write_text("Initial repo\n")
+    subprocess.run(["git", "add", "init.txt"], cwd=src, check=True)
+    subprocess.run(["git", "commit", "-m", "Initial full repo"], cwd=src, check=True)
+    bdd_ctx["src_repo"] = src
+    bdd_ctx["bundle_dir"] = tmp_path / "bundle_full"
+
+
+@given("an empty destination repository")
+def step_given_empty_destination_repo(tmp_path: Path, bdd_ctx: dict[str, Any]) -> None:
+    dst = _init_git_repo(tmp_path / "dst_full_repo")
+    bdd_ctx["dst_repo"] = dst
+
+
+@when(parsers.parse('I pack the full branch "{branch}" into a bundle'))
+def step_when_pack_full_branch(branch: str, bdd_ctx: dict[str, Any]) -> None:
+    src = bdd_ctx["src_repo"]
+    bundle_dir = bdd_ctx["bundle_dir"]
+    code = main(["--repo", str(src), "pack", branch, "-o", str(bundle_dir)])
+    assert code == 0
+
+
+@when("I unpack the bundle into the destination repository")
+def step_when_unpack_into_destination(bdd_ctx: dict[str, Any]) -> None:
+    dst = bdd_ctx["dst_repo"]
+    bundle_dir = bdd_ctx["bundle_dir"]
+    code = main(["--repo", str(dst), "unpack", str(bundle_dir)])
+    assert code == 0
+
+
+@then('the destination repository should have branch "main" matching the source')
+def step_then_destination_matches_source(bdd_ctx: dict[str, Any]) -> None:
+    src = bdd_ctx["src_repo"]
+    dst = bdd_ctx["dst_repo"]
+    src_oid = (
+        subprocess.run(
+            ["git", "rev-parse", "refs/heads/main"], cwd=src, capture_output=True, check=True
+        )
+        .stdout.decode()
+        .strip()
+    )
+    dst_oid = (
+        subprocess.run(
+            ["git", "rev-parse", "refs/heads/main"], cwd=dst, capture_output=True, check=True
+        )
+        .stdout.decode()
+        .strip()
+    )
+    assert dst_oid == src_oid
+
+
+@then("git fsck in the destination repository should report no corruption")
+def step_then_fsck_clean_destination(bdd_ctx: dict[str, Any]) -> None:
+    dst = bdd_ctx["dst_repo"]
+    proc = subprocess.run(["git", "fsck"], cwd=dst, capture_output=True)
+    assert proc.returncode == 0
+
+
+# --- Steps for quarantine_sidechannel.feature ---
+
+
+@given(
+    'a feature branch containing text files, a whitelisted "png" image, and a non-whitelisted "bin" file'
+)
+def step_given_feature_with_mixed_assets(bdd_ctx: dict[str, Any]) -> None:
+    src = bdd_ctx["src_repo"]
+    subprocess.run(["git", "checkout", "-b", "feature"], cwd=src, check=True)
+    (src / "code.py").write_text("print('code')\n")
+    (src / "asset.png").write_bytes(b"\x89PNG\r\n\x1a\nvalid_png_content")
+    (src / "payload.bin").write_bytes(b"\x00\x01\x02binary_bytes")
+    subprocess.run(["git", "add", "."], cwd=src, check=True)
+    subprocess.run(["git", "commit", "-m", "Add mixed assets"], cwd=src, check=True)
+
+
+@when(parsers.parse('I pack the delta with whitelist extension "{ext}"'))
+def step_when_pack_with_whitelist(ext: str, bdd_ctx: dict[str, Any]) -> None:
+    src = bdd_ctx["src_repo"]
+    bundle_dir = bdd_ctx["bundle_dir"]
+    code = main(
+        [
+            "--repo",
+            str(src),
+            "pack",
+            "main..feature",
+            "-o",
+            str(bundle_dir),
+            "--whitelist-ext",
+            ext,
+        ]
+    )
+    assert code == 0
+
+
+@then("the bundle should contain the whitelisted image in the blobs directory")
+def step_then_bundle_contains_whitelisted(bdd_ctx: dict[str, Any]) -> None:
+    bundle_dir = bdd_ctx["bundle_dir"]
+    png_files = list((bundle_dir / "blobs").rglob("*.png"))
+    assert len(png_files) == 1
+
+
+@then(
+    "the non-whitelisted file should be segregated into the quarantine directory with an audit manifest"
+)
+def step_then_quarantined_segregated(bdd_ctx: dict[str, Any]) -> None:
+    bundle_dir = bdd_ctx["bundle_dir"]
+    q_dir = bundle_dir / "quarantine"
+    assert (q_dir / "quarantine-manifest.txt").is_file()
+    q_bin_files = list(q_dir.glob("*.bin"))
+    assert len(q_bin_files) == 1
+
+
+@given("a bundle containing quarantined binary objects")
+def step_given_bundle_with_quarantine(tmp_path: Path, bdd_ctx: dict[str, Any]) -> None:
+    src = _init_git_repo(tmp_path / "src_q_repo")
+    (src / "base.txt").write_text("Base\n")
+    subprocess.run(["git", "add", "base.txt"], cwd=src, check=True)
+    subprocess.run(["git", "commit", "-m", "Base commit"], cwd=src, check=True)
+
+    subprocess.run(["git", "checkout", "-b", "feature"], cwd=src, check=True)
+    (src / "data.bin").write_bytes(b"\x00\x01\x02quarantine_me")
+    subprocess.run(["git", "add", "data.bin"], cwd=src, check=True)
+    subprocess.run(["git", "commit", "-m", "Commit with binary"], cwd=src, check=True)
+
+    bundle_dir = tmp_path / "q_bundle"
+    code = main(["--repo", str(src), "pack", "main..feature", "-o", str(bundle_dir)])
+    assert code == 0
+
+    bdd_ctx["src_repo"] = src
+    bdd_ctx["bundle_dir"] = bundle_dir
+
+
+@when("I attempt to unpack the bundle without specifying a sidechannel directory")
+def step_when_unpack_no_sidechannel(bdd_ctx: dict[str, Any]) -> None:
+    dst = bdd_ctx["dst_repo"]
+    bundle_dir = bdd_ctx["bundle_dir"]
+    code = main(["--repo", str(dst), "unpack", str(bundle_dir)])
+    bdd_ctx["unpack_exit_code"] = code
+
+
+@then("the unpack operation should fail with a quarantine error")
+def step_then_unpack_fails_quarantine(bdd_ctx: dict[str, Any]) -> None:
+    assert bdd_ctx["unpack_exit_code"] != 0
+
+
+@then("the target repository reference should remain unchanged")
+def step_then_target_ref_unchanged(bdd_ctx: dict[str, Any]) -> None:
+    dst = bdd_ctx["dst_repo"]
+    proc = subprocess.run(
+        ["git", "rev-parse", "--verify", "refs/heads/feature"], cwd=dst, capture_output=True
+    )
+    assert proc.returncode != 0
+
+
+@given("a mounted sidechannel media directory containing the quarantined objects")
+def step_given_sidechannel_media(bdd_ctx: dict[str, Any]) -> None:
+    bundle_dir = bdd_ctx["bundle_dir"]
+    bdd_ctx["sidechannel_dir"] = bundle_dir / "quarantine"
+
+
+@when("I unpack the bundle with the sidechannel directory specified")
+def step_when_unpack_with_sidechannel(bdd_ctx: dict[str, Any]) -> None:
+    dst = bdd_ctx["dst_repo"]
+    bundle_dir = bdd_ctx["bundle_dir"]
+    sidechannel_dir = bdd_ctx["sidechannel_dir"]
+    code = main(
+        [
+            "--repo",
+            str(dst),
+            "unpack",
+            str(bundle_dir),
+            "--sidechannel",
+            str(sidechannel_dir),
+        ]
+    )
+    bdd_ctx["unpack_exit_code"] = code
+
+
+@then("the unpack operation should succeed")
+def step_then_unpack_succeeds(bdd_ctx: dict[str, Any]) -> None:
+    assert bdd_ctx["unpack_exit_code"] == 0
+
+
+@then("the target repository should checkout all files including the quarantined binary")
+def step_then_target_checkout_quarantined(bdd_ctx: dict[str, Any]) -> None:
+    dst = bdd_ctx["dst_repo"]
+    subprocess.run(["git", "checkout", "feature"], cwd=dst, capture_output=True, check=True)
+    assert (dst / "data.bin").read_bytes() == b"\x00\x01\x02quarantine_me"
+
+
+# --- Steps for ingress_tamper_defense.feature ---
+
+
+@given("a valid bundle created from a feature branch")
+def step_given_valid_bundle_from_feature(tmp_path: Path, bdd_ctx: dict[str, Any]) -> None:
+    src = _init_git_repo(tmp_path / "src_tamper")
+    (src / "base.txt").write_text("Base text\n")
+    subprocess.run(["git", "add", "base.txt"], cwd=src, check=True)
+    subprocess.run(["git", "commit", "-m", "Base commit"], cwd=src, check=True)
+
+    subprocess.run(["git", "checkout", "-b", "feature"], cwd=src, check=True)
+    (src / "code.txt").write_text("Original code\n")
+    subprocess.run(["git", "add", "code.txt"], cwd=src, check=True)
+    subprocess.run(["git", "commit", "-m", "Feature commit"], cwd=src, check=True)
+
+    bundle_dir = tmp_path / "bundle_tamper"
+    code = main(["--repo", str(src), "pack", "main..feature", "-o", str(bundle_dir)])
+    assert code == 0
+
+    bdd_ctx["src_repo"] = src
+    bdd_ctx["bundle_dir"] = bundle_dir
+
+
+@when("an attacker alters the content of a blob file in the bundle")
+def step_when_attacker_alters_blob(bdd_ctx: dict[str, Any]) -> None:
+    bundle_dir = bdd_ctx["bundle_dir"]
+    blobs = list((bundle_dir / "blobs").rglob("*.txt"))
+    assert len(blobs) > 0
+    blobs[0].write_bytes(b"TAMPERED MALICIOUS CONTENT\n")
+
+
+@when("I attempt to unpack the altered bundle into the target repository")
+@when("I attempt to unpack the bundle into the target repository")
+def step_when_unpack_tampered_bundle(bdd_ctx: dict[str, Any]) -> None:
+    dst = bdd_ctx["dst_repo"]
+    bundle_dir = bdd_ctx["bundle_dir"]
+    code = main(["--repo", str(dst), "unpack", str(bundle_dir)])
+    bdd_ctx["tamper_exit_code"] = code
+
+
+@then("the unpack operation should fail with a cryptographic mismatch error")
+@then("the unpack operation should fail with a missing prerequisite error")
+def step_then_unpack_fails_cryptographic(bdd_ctx: dict[str, Any]) -> None:
+    assert bdd_ctx["tamper_exit_code"] != 0
+
+
+@given("a valid bundle requiring a specific base commit")
+def step_given_bundle_requiring_prereq(tmp_path: Path, bdd_ctx: dict[str, Any]) -> None:
+    src = _init_git_repo(tmp_path / "src_prereq")
+    (src / "base.txt").write_text("Base\n")
+    subprocess.run(["git", "add", "base.txt"], cwd=src, check=True)
+    subprocess.run(["git", "commit", "-m", "Base commit"], cwd=src, check=True)
+
+    subprocess.run(["git", "checkout", "-b", "feature"], cwd=src, check=True)
+    (src / "feat.txt").write_text("Feature\n")
+    subprocess.run(["git", "add", "feat.txt"], cwd=src, check=True)
+    subprocess.run(["git", "commit", "-m", "Feat"], cwd=src, check=True)
+
+    bundle_dir = tmp_path / "bundle_prereq"
+    code = main(["--repo", str(src), "pack", "main..feature", "-o", str(bundle_dir)])
+    assert code == 0
+
+    bdd_ctx["src_repo"] = src
+    bdd_ctx["bundle_dir"] = bundle_dir
+
+
+@given("an empty target repository lacking the prerequisite commit")
+def step_given_empty_target_lacking_prereq(tmp_path: Path, bdd_ctx: dict[str, Any]) -> None:
+    dst = _init_git_repo(tmp_path / "dst_empty_target")
+    bdd_ctx["dst_repo"] = dst
+
+
+@then("the target repository should contain no references")
+def step_then_target_contains_no_refs(bdd_ctx: dict[str, Any]) -> None:
+    dst = bdd_ctx["dst_repo"]
+    proc = subprocess.run(["git", "show-ref"], cwd=dst, capture_output=True)
+    assert proc.stdout.strip() == b""

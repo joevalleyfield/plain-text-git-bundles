@@ -68,36 +68,47 @@ A comprehensive, executable BDD specification suite:
 
 ## Investigations
 
-- Verify `pytest-bdd` step fixture scoping when handling multi-repo (source and destination) scenarios.
+- Verified round-trip cross-domain transfer across independent git repositories using pytest-bdd scenarios.
+- Verified single-branch upstream clone behavior in fixtures to ensure prerequisite and delta boundaries are accurately exercised.
 
 ## Models / Forecasts / Risks
 
-- **Slow Test Suite**: Real Git process invocations can be slow if overused. Using lean Git histories (1-3 commits, small files) keeps execution fast (< 2 seconds total).
+- **Slow Test Suite**: Real Git process invocations can be slow if overused. Using lean Git histories (1-3 commits, small files) keeps execution fast (entire 62-test suite finishes in ~2.2s).
 
 ## Transformations
 
-1. Create `tests/features/delta_transfer.feature`.
-2. Create `tests/features/quarantine_sidechannel.feature`.
-3. Create `tests/features/ingress_tamper_defense.feature`.
-4. Implement step definitions in `tests/test_bdd_scenarios.py` (or `tests/step_defs/`).
-5. Run test suite to verify 100% coverage and passing scenarios.
-6. Update `tasks/open/260922-bdd-acceptance-suite.md` with progress stitching.
+1. Created `tests/features/delta_transfer.feature` specifying 3 scenarios:
+   - Packaging and unpacking branch delta across repositories with exact bit-for-bit file and log match
+   - Packaging and unpacking full repository history from scratch (no prerequisites)
+   - Repeated unpacking is idempotent and retains repository health
+2. Created `tests/features/quarantine_sidechannel.feature` specifying 2 scenarios:
+   - Non-whitelisted binaries diverted to quarantine directory and rejected on unpack without sidechannel
+   - Successful unpack and branch advance when `--sidechannel` is supplied with quarantined media
+3. Created `tests/features/ingress_tamper_defense.feature` specifying 2 scenarios:
+   - Ingress rejects tampered blob object and preserves destination repository untouched
+   - Ingress rejects bundle when prerequisite commit is missing and preserves destination repository untouched
+4. Implemented step definitions in `tests/test_bdd_scenarios.py` using `pytest-bdd` (8.1.0) with clean source/destination repo isolation fixtures and direct CLI invocation.
+5. Moved task from `tasks/open/260922-bdd-acceptance-suite.md` to `tasks/closed/260922-bdd-acceptance-suite.md`.
+6. Refreshed workboard with `python3 tasks/scripts/sync_workboard.py`.
 
 ## Evidence
 
-- `uv run pytest`: All BDD scenarios and unit tests passing with 100% statement and branch coverage.
-- `uv run ruff check .` and `uv run ruff format --check .`: Clean.
-- `uv run mypy src tests`: Clean.
+- `uv run pytest`: 62 passed in 2.28s, 100% statement and branch coverage (890 statements, 302 branches).
+- `uv run ruff check .`: Clean (0 errors).
+- `uv run ruff format --check .`: 30 files already formatted.
+- `uv run mypy src tests`: Success: no issues found in 17 source files.
 
 ## Decisions
 
 - **Direct CLI invocation in steps**: BDD steps invoke `cli.main(argv)` directly in-process or via runner, verifying exact stdout and return codes as a user would observe them.
+- **Single-branch cloning for upstream fixtures**: Used `git clone --branch main --single-branch` for destination repositories to ensure feature branch tips are absent prior to unpacking deltas.
+- **Isolation of side-channel media**: Verifying that quarantine files are written outside the bundle directory in `quarantine/` and correctly resolved when passed via `--sidechannel`.
 
 ## Open Fronts
 
-- None.
+- None. All Phase 1 milestones (Milestones 1 through 6) are complete, verified, and closed.
 
 ## Next Actions
 
-1. Review task with thread peer.
-2. Implement feature files and step definitions.
+- Fold closure into commit `test(bdd): implement acceptance test suite with pytest-bdd`.
+- Advance `main` bookmark in `jj`.

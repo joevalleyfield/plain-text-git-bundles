@@ -6,7 +6,7 @@
 ## 0. Focus Queue
 
 <!-- WORKBOARD:NOW:START -->
-- **[`260922-bdd-acceptance-suite`]** A comprehensive, executable BDD specification suite: **Feature Scenarios (`tests/features/`)**: `delta_transfer.feature`: Packaging a branch delta (`m...
+- _No open tasks._
 <!-- WORKBOARD:NOW:END -->
 
 ## 1. Relationship Tree
@@ -34,4 +34,5 @@
 - **[`260922-git-repo-io`]** - `uv run pytest`: 49 passed in 0.60s with 100% line and branch coverage (`--cov-fail-under=100`).
 - **[`260922-git-object-model`]** - `uv run pytest`: 27 passed in 0.18s with 100% line and branch coverage (`--cov-fail-under=100`).
 - **[`260922-bundle-manifest-engine`]** - `uv run pytest`: 36 passed in 0.20s with 100% line and branch coverage (`--cov-fail-under=100`).
+- **[`260922-bdd-acceptance-suite`]** - `uv run pytest`: 62 passed in 2.28s, 100% statement and branch coverage (890 statements, 302 branches).
 <!-- WORKBOARD:CLOSED:END -->
