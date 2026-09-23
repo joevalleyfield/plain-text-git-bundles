@@ -6,7 +6,7 @@
 ## 0. Focus Queue
 
 <!-- WORKBOARD:NOW:START -->
-- _No open tasks._
+- **[`260922-pack-unpack-orchestrators`]** Dedicated orchestrators in `src/ptbundle/pack.py` and `src/ptbundle/unpack.py`, fully wired into `src/ptbundle/cli.py`:  **Pack Orchestrator (`src/ptb...
 <!-- WORKBOARD:NOW:END -->
 
 ## 1. Relationship Tree
