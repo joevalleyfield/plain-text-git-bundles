@@ -1,22 +1,27 @@
 # ptbundle Workboard
 
 > **Status:** Active Development
-> **Last Sync:** 2026-09-22
+> **Last Sync:** 2026-09-23
 
 ## 0. Focus Queue
 
 <!-- WORKBOARD:NOW:START -->
-- _No open tasks._
+- **[`260923-bdd-phase2-acceptance`]** **Delta Compression Acceptance Scenario**: Create a realistic repository history with multiple commits iteratively modifying wide directory trees and ...
+- **[`260923-delta-pack-unpack-integration`]** **Pack Integration (`src/ptbundle/pack.py`)**: Track commit parent/child relationships in the rev-list to identify path-level ancestor blobs and trees...
+- **[`260923-git-bundle-bridge`]** **`from-bundle` Subcommand**: `ptbundle from-bundle <bundle_file> -o <ptbundle_dir> [--whitelist-ext ...]` Unpacks the bundle into an isolated tempora...
+- **[`260923-plain-text-delta-engine`]** A new module `src/ptbundle/delta.py` providing: **`TextDelta` Data Class**: Fields: `object_type: GitObjectType`, `path: str`, `base_oid: str`, `targe...
 <!-- WORKBOARD:NOW:END -->
 
 ## 1. Relationship Tree
 
 <!-- WORKBOARD:RELATIONSHIP_ROOTS:START -->
-`260922-git-object-model`
+`260923-plain-text-delta-engine`
+`260923-git-bundle-bridge`
 <!-- WORKBOARD:RELATIONSHIP_ROOTS:END -->
 
 <!-- WORKBOARD:RELATIONSHIP_TREE:START -->
-- Warning: root `260922-git-object-model` not rendered (closed task).
+- `260923-plain-text-delta-engine`: A new module `src/ptbundle/delta.py` providing: **`TextDelta` Data Class**: Fields: `object_type: GitObjectType`, `path: str`, `base_oid: str`, `targe... (depends on `260922-git-object-model`; blocks `260923-delta-pack-unpack-integration`; related `260923-git-bundle-bridge`)
+- `260923-git-bundle-bridge`: **`from-bundle` Subcommand**: `ptbundle from-bundle <bundle_file> -o <ptbundle_dir> [--whitelist-ext ...]` Unpacks the bundle into an isolated tempora... (depends on `260922-git-repo-io`; blocks `260923-bdd-phase2-acceptance`; related `260923-delta-pack-unpack-integration`)
 <!-- WORKBOARD:RELATIONSHIP_TREE:END -->
 
 ## 2. Inbox
