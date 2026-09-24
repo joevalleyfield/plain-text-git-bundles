@@ -215,3 +215,61 @@ def test_discover_delta_batch_parsing_edge_cases(
     assert delta.objects[0].oid == "1" * 40
     assert delta.objects[0].type == GitObjectType.BLOB
     assert delta.objects[0].payload == b"data"
+
+
+def test_read_raw_object_and_get_object_at_revision(tmp_path: Path) -> None:
+    repo = _init_repo(tmp_path)
+    sub = tmp_path / "subdir"
+    sub.mkdir()
+    f1 = sub / "hello.txt"
+    f1.write_text("hello world\n")
+    repo.run_git(["add", "."])
+    repo.run_git(["commit", "-m", "initial"])
+
+    blob_oid = repo.run_git(["rev-parse", "HEAD:subdir/hello.txt"]).stdout.decode().strip()
+    tree_oid = repo.run_git(["rev-parse", "HEAD:subdir"]).stdout.decode().strip()
+    root_tree_oid = repo.run_git(["rev-parse", "HEAD^{tree}"]).stdout.decode().strip()
+
+    # 1. read_raw_object with obj_type specified
+    blob_bytes = repo.read_raw_object(blob_oid, GitObjectType.BLOB)
+    assert blob_bytes == b"hello world\n"
+
+    tree_bytes = repo.read_raw_object(tree_oid, GitObjectType.TREE)
+    assert tree_bytes is not None
+
+    # 2. read_raw_object without obj_type specified (cat-file -p)
+    raw_untyped = repo.read_raw_object(blob_oid)
+    assert raw_untyped == b"hello world\n"
+
+    # 3. read_raw_object with nonexistent OID
+    assert repo.read_raw_object("9" * 40) is None
+    assert repo.read_raw_object("9" * 40, GitObjectType.BLOB) is None
+
+    # 4. read_raw_object with wrong obj_type (blob requested as tree)
+    assert repo.read_raw_object(blob_oid, GitObjectType.TREE) is None
+
+    # 5. get_object_at_revision: root tree
+    res_root = repo.get_object_at_revision("HEAD", "", GitObjectType.TREE)
+    assert res_root is not None
+    assert res_root[0] == root_tree_oid
+
+    # 6. get_object_at_revision: subtree
+    res_sub = repo.get_object_at_revision("HEAD", "subdir", GitObjectType.TREE)
+    assert res_sub is not None
+    assert res_sub[0] == tree_oid
+
+    # 7. get_object_at_revision: blob
+    res_blob = repo.get_object_at_revision("HEAD", "subdir/hello.txt", GitObjectType.BLOB)
+    assert res_blob is not None
+    assert res_blob[0] == blob_oid
+    assert res_blob[1] == b"hello world\n"
+
+    # 8. get_object_at_revision: blob with empty path returns None
+    assert repo.get_object_at_revision("HEAD", "", GitObjectType.BLOB) is None
+
+    # 9. get_object_at_revision: nonexistent path or rev
+    assert repo.get_object_at_revision("HEAD", "nonexistent.txt", GitObjectType.BLOB) is None
+    assert repo.get_object_at_revision("nonexistent_rev", "subdir", GitObjectType.TREE) is None
+
+    # 10. get_object_at_revision: path is blob but tree requested
+    assert repo.get_object_at_revision("HEAD", "subdir/hello.txt", GitObjectType.TREE) is None

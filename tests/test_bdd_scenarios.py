@@ -535,3 +535,110 @@ def step_then_clone_from_synthesized_bundle(tmp_path: Path, bdd_ctx: dict[str, A
     ).stdout.strip()
     assert src_feat == clone_head
     assert (clone_dir / "feature.txt").read_text() == "Feature text\n"
+
+
+@given('a source repository with a wide multi-file tree on "main"')
+def step_given_wide_tree_main(tmp_path: Path, bdd_ctx: dict[str, Any]) -> None:
+    src = _init_git_repo(tmp_path / "src_wide_repo")
+    sub = src / "pkg"
+    sub.mkdir()
+    for i in range(20):
+        (src / f"root_mod_{i:02d}.py").write_text(f"# Root module {i}\n" + "def fn(): pass\n" * 50)
+        (sub / f"sub_mod_{i:02d}.py").write_text(
+            f"# Sub module {i}\n" + "def sub_fn(): pass\n" * 50
+        )
+    subprocess.run(["git", "add", "."], cwd=src, check=True)
+    subprocess.run(["git", "commit", "-m", "Initial wide tree"], cwd=src, check=True)
+    bdd_ctx["src_wide_repo"] = src
+
+
+@given("a single-commit feature branch modifying text files and directory trees")
+def step_given_single_commit_feature(bdd_ctx: dict[str, Any]) -> None:
+    src = bdd_ctx["src_wide_repo"]
+    subprocess.run(["git", "checkout", "-b", "feature_single"], cwd=src, check=True)
+    (src / "root_mod_00.py").write_text("# Root module 00 MODIFIED\n" + "def fn(): pass\n" * 50)
+    (src / "pkg" / "sub_mod_00.py").write_text(
+        "# Sub module 00 MODIFIED\n" + "def sub_fn(): pass\n" * 50
+    )
+    (src / "pkg" / "brand_new.py").write_text("# Brand new file\n")
+    subprocess.run(["git", "add", "."], cwd=src, check=True)
+    subprocess.run(["git", "commit", "-m", "Single commit feature"], cwd=src, check=True)
+
+
+@when("I pack the revision delta as a thin bundle")
+def step_when_pack_thin_bundle(tmp_path: Path, bdd_ctx: dict[str, Any]) -> None:
+    src = bdd_ctx["src_wide_repo"]
+    bundle_dir = tmp_path / "thin_bundle_bdd"
+    code = main(
+        ["--repo", str(src), "pack", "main..feature_single", "-o", str(bundle_dir), "--thin"]
+    )
+    assert code == 0
+    bdd_ctx["thin_bundle_bdd"] = bundle_dir
+
+
+@then('the generated bundle contains thin deltas referencing basis objects from "main"')
+def step_then_verify_thin_deltas(bdd_ctx: dict[str, Any]) -> None:
+    bundle_dir = bdd_ctx["thin_bundle_bdd"]
+    deltas = list(bundle_dir.rglob("*.delta.txt"))
+    assert len(deltas) >= 2
+
+
+@then('the basis objects from "main" are not bundled in the package')
+def step_then_verify_bases_not_bundled(bdd_ctx: dict[str, Any]) -> None:
+    bundle_dir = bdd_ctx["thin_bundle_bdd"]
+    deltas = list(bundle_dir.rglob("*.delta.txt"))
+    for d in deltas:
+        for line in d.read_text().splitlines():
+            if line.startswith("base: "):
+                base_oid = line.split()[1]
+                assert not (bundle_dir / "blobs" / base_oid[:2] / f"{base_oid[2:]}.txt").exists()
+                assert not (bundle_dir / "trees" / base_oid[:2] / f"{base_oid[2:]}.txt").exists()
+
+
+@then('unpacking the thin bundle into a clone of "main" reproduces the exact feature state')
+def step_then_unpack_thin_bundle_clone(tmp_path: Path, bdd_ctx: dict[str, Any]) -> None:
+    src = bdd_ctx["src_wide_repo"]
+    bundle_dir = bdd_ctx["thin_bundle_bdd"]
+    dst = tmp_path / "dst_clone_main"
+    subprocess.run(
+        ["git", "clone", "--branch", "main", "--single-branch", str(src), str(dst)],
+        check=True,
+        capture_output=True,
+    )
+    code = main(["--repo", str(dst), "unpack", str(bundle_dir)])
+    assert code == 0
+    subprocess.run(
+        ["git", "reset", "--hard", "refs/heads/feature_single"],
+        cwd=dst,
+        check=True,
+        capture_output=True,
+    )
+    assert (dst / "root_mod_00.py").read_text() == (src / "root_mod_00.py").read_text()
+    assert (dst / "pkg" / "sub_mod_00.py").read_text() == (
+        src / "pkg" / "sub_mod_00.py"
+    ).read_text()
+    assert (dst / "pkg" / "brand_new.py").read_text() == "# Brand new file\n"
+
+
+@when("I pack the revision delta with no-thin specified")
+def step_when_pack_nothin_bundle(tmp_path: Path, bdd_ctx: dict[str, Any]) -> None:
+    src = bdd_ctx["src_wide_repo"]
+    bundle_dir = tmp_path / "thick_bundle_bdd"
+    code = main(
+        ["--repo", str(src), "pack", "main..feature_single", "-o", str(bundle_dir), "--no-thin"]
+    )
+    assert code == 0
+    bdd_ctx["thick_bundle_bdd"] = bundle_dir
+
+
+@then("the generated bundle contains zero delta files")
+def step_then_verify_zero_deltas(bdd_ctx: dict[str, Any]) -> None:
+    bundle_dir = bdd_ctx["thick_bundle_bdd"]
+    assert len(list(bundle_dir.rglob("*.delta.txt"))) == 0
+
+
+@then("all objects are stored in full for standalone self-containment")
+def step_then_verify_all_full(bdd_ctx: dict[str, Any]) -> None:
+    bundle_dir = bdd_ctx["thick_bundle_bdd"]
+    assert (bundle_dir / "manifest.txt").is_file()
+    assert len(list((bundle_dir / "blobs").rglob("*.txt"))) >= 3

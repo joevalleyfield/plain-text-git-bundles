@@ -18,3 +18,19 @@ Feature: Plain-Text Delta Compression and Git Bundle Interoperability
     And I convert the ptbundle directory back into a canonical Git bundle
     Then the synthesized Git bundle passes canonical git bundle verification
     And cloning from the synthesized Git bundle matches the source repository
+
+  Scenario: Single-commit PR incremental pack with thin deltas against base commit
+    Given a source repository with a wide multi-file tree on "main"
+    And a single-commit feature branch modifying text files and directory trees
+    When I pack the revision delta as a thin bundle
+    Then the generated bundle contains thin deltas referencing basis objects from "main"
+    And the basis objects from "main" are not bundled in the package
+    And unpacking the thin bundle into a clone of "main" reproduces the exact feature state
+
+  Scenario: Single-commit PR pack with no-thin enforces complete self-containment
+    Given a source repository with a wide multi-file tree on "main"
+    And a single-commit feature branch modifying text files and directory trees
+    When I pack the revision delta with no-thin specified
+    Then the generated bundle contains zero delta files
+    And all objects are stored in full for standalone self-containment
+

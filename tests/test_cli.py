@@ -242,3 +242,42 @@ def test_cli_bundle_bridge_errors(tmp_path: Path, capsys: pytest.CaptureFixture[
     assert code_to == 1
     captured_to = capsys.readouterr()
     assert "Error converting to Git bundle" in captured_to.err
+
+
+def test_cli_pack_thin_and_no_thin(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    repo_a = _setup_test_repo(tmp_path / "repo_a")
+
+    # 1. pack with explicit --thin
+    bundle_thin = tmp_path / "bundle_thin"
+    code_thin = main(
+        ["--repo", str(repo_a), "pack", "main..feature", "-o", str(bundle_thin), "--thin"]
+    )
+    assert code_thin == 0
+    assert (bundle_thin / "manifest.txt").is_file()
+
+    # 2. pack with explicit --no-thin
+    bundle_thick = tmp_path / "bundle_thick"
+    code_thick = main(
+        ["--repo", str(repo_a), "pack", "main..feature", "-o", str(bundle_thick), "--no-thin"]
+    )
+    assert code_thick == 0
+    assert (bundle_thick / "manifest.txt").is_file()
+    assert len(list(bundle_thick.rglob("*.delta.txt"))) == 0
+
+    # 3. from-bundle with --no-thin
+    git_bundle = tmp_path / "cli_test.bundle"
+    subprocess.run(["git", "bundle", "create", str(git_bundle), "main"], cwd=repo_a, check=True)
+    bundle_converted = tmp_path / "bundle_converted"
+    code_from = main(
+        [
+            "--repo",
+            str(repo_a),
+            "from-bundle",
+            str(git_bundle),
+            "-o",
+            str(bundle_converted),
+            "--no-thin",
+        ]
+    )
+    assert code_from == 0
+    assert (bundle_converted / "manifest.txt").is_file()

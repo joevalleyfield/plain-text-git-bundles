@@ -25,6 +25,7 @@ def pack_bundle(
     whitelist_policy: WhitelistPolicy | None = None,
     ref_name: str | None = None,
     enable_delta: bool = True,
+    thin: bool = True,
 ) -> Manifest:
     """Extract a revision delta from repo and emit a plain-text bundle directory."""
     out = Path(output_dir).resolve()
@@ -89,6 +90,28 @@ def pack_bundle(
                     )
                     trees_delta_count += 1
                     delta_created = True
+            elif enable_delta and thin and delta.prerequisites:
+                for prereq in delta.prerequisites:
+                    base_info = repo.get_object_at_revision(prereq, obj.path, GitObjectType.TREE)
+                    if base_info is not None and base_info[0] != obj.oid:
+                        base_oid, base_payload = base_info
+                        prev_tree = GitTree.from_binary_payload(base_payload)
+                        prev_tree_text = prev_tree.to_text().encode("utf-8")
+                        tree_delta = create_text_delta(
+                            base_payload=prev_tree_text,
+                            target_payload=curr_tree_text,
+                            base_oid=base_oid,
+                            target_oid=obj.oid,
+                            object_type=GitObjectType.TREE,
+                            path=obj.path,
+                        )
+                        if tree_delta is not None:
+                            (tree_dir / f"{rest}.delta.txt").write_text(
+                                tree_delta.to_text(), encoding="utf-8"
+                            )
+                            trees_delta_count += 1
+                            delta_created = True
+                            break
 
             if not delta_created:
                 # Write plain-text ls-tree notation (zero null bytes)
@@ -124,6 +147,29 @@ def pack_bundle(
                             )
                             blobs_delta_count += 1
                             delta_created = True
+                elif enable_delta and thin and delta.prerequisites:
+                    for prereq in delta.prerequisites:
+                        base_info = repo.get_object_at_revision(
+                            prereq, obj.path, GitObjectType.BLOB
+                        )
+                        if base_info is not None:
+                            base_oid, base_payload = base_info
+                            if base_oid != obj.oid and classifier.is_text_payload(base_payload):
+                                blob_delta = create_text_delta(
+                                    base_payload=base_payload,
+                                    target_payload=obj.payload,
+                                    base_oid=base_oid,
+                                    target_oid=obj.oid,
+                                    object_type=GitObjectType.BLOB,
+                                    path=obj.path,
+                                )
+                                if blob_delta is not None:
+                                    (blob_dir / f"{rest}.delta.txt").write_text(
+                                        blob_delta.to_text(), encoding="utf-8"
+                                    )
+                                    blobs_delta_count += 1
+                                    delta_created = True
+                                    break
 
                 if not delta_created:
                     (blob_dir / f"{rest}.txt").write_bytes(obj.payload)

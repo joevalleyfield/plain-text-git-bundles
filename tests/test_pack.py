@@ -152,3 +152,65 @@ def test_pack_bundle_delta_fallbacks(tmp_path: Path) -> None:
     )
     assert manifest.metrics.commits == 2
     assert manifest.metrics.blobs_delta == 0
+
+
+def test_pack_bundle_thin_and_no_thin(tmp_path: Path) -> None:
+    repo_dir = tmp_path / "thin_repo"
+    repo_dir.mkdir()
+    subprocess.run(["git", "init", "-b", "main"], cwd=repo_dir, capture_output=True, check=True)
+    subprocess.run(["git", "config", "user.name", "Tester"], cwd=repo_dir, check=True)
+    subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=repo_dir, check=True)
+
+    # Base commit on main with multiple entries so tree text is ~1KB+
+    for i in range(20):
+        (repo_dir / f"entry_{i:02d}.txt").write_text("initial\n" + "context\n" * 50)
+    sub_dir = repo_dir / "subdir"
+    sub_dir.mkdir()
+    for i in range(20):
+        (sub_dir / f"subdoc_{i:02d}.txt").write_text("sub initial\n" + "context\n" * 50)
+    (repo_dir / "large.txt").write_text("large initial line\n" + "context\n" * 50)
+    (repo_dir / "bin_to_text.txt").write_bytes(b"\x00binary_initial\x00")
+    (repo_dir / "small.txt").write_text("a")
+    subprocess.run(["git", "add", "."], cwd=repo_dir, check=True)
+    subprocess.run(["git", "commit", "-m", "Base commit"], cwd=repo_dir, check=True)
+
+    # Feature branch with 1 commit modifying large.txt and subdoc_00.txt, adding new_file.txt and new_dir/nested.txt
+    subprocess.run(["git", "checkout", "-b", "feature"], cwd=repo_dir, check=True)
+    (sub_dir / "subdoc_00.txt").write_text("subdoc modified line\n" + "context\n" * 50)
+    (repo_dir / "large.txt").write_text("large modified line\n" + "context\n" * 50)
+    (repo_dir / "bin_to_text.txt").write_text("now pure text\n")
+    (repo_dir / "small.txt").write_text("b")
+    (repo_dir / "new_file.txt").write_text("completely brand new file\n")
+    new_sub_dir = repo_dir / "new_dir"
+    new_sub_dir.mkdir()
+    (new_sub_dir / "nested.txt").write_text("nested content\n")
+    subprocess.run(["git", "add", "."], cwd=repo_dir, check=True)
+    subprocess.run(["git", "commit", "-m", "Feature commit (1 ahead)"], cwd=repo_dir, check=True)
+
+    repo = GitRepo.discover(repo_dir)
+
+    # 1. Thin pack (default): should delta-compress large.txt, subdoc.txt, and trees against main
+    bundle_thin_dir = tmp_path / "thin_bundle"
+    manifest_thin = pack_bundle(repo, "main..feature", bundle_thin_dir, thin=True)
+    assert manifest_thin.metrics.commits == 1
+    assert manifest_thin.metrics.blobs_delta >= 2
+    assert manifest_thin.metrics.trees_delta >= 1
+
+    # Verify that the delta files exist and their bases are NOT in the bundle
+    blob_deltas = list((bundle_thin_dir / "blobs").rglob("*.delta.txt"))
+    assert len(blob_deltas) >= 2
+    for bd in blob_deltas:
+        base_line = [l for l in bd.read_text().splitlines() if l.startswith("base: ")][0]
+        base_oid = base_line.split()[1]
+        base_fanout = base_oid[:2]
+        base_rest = base_oid[2:]
+        # Base is NOT bundled as a full blob
+        assert not (bundle_thin_dir / "blobs" / base_fanout / f"{base_rest}.txt").exists()
+
+    # 2. No-thin pack (opt-out): single commit cannot delta because no bases in range
+    bundle_thick_dir = tmp_path / "thick_bundle"
+    manifest_thick = pack_bundle(repo, "main..feature", bundle_thick_dir, thin=False)
+    assert manifest_thick.metrics.commits == 1
+    assert manifest_thick.metrics.blobs_delta == 0
+    assert manifest_thick.metrics.trees_delta == 0
+    assert len(list(bundle_thick_dir.rglob("*.delta.txt"))) == 0

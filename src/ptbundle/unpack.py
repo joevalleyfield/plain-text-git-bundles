@@ -87,19 +87,32 @@ def unpack_bundle(
         while pending_tree_deltas:
             progress = False
             for delta in list(pending_tree_deltas):
+                base_tree_text: bytes | None = None
                 if delta.base_oid in resolved_trees:
                     base_tree = resolved_trees[delta.base_oid]
                     base_tree_text = base_tree.to_text().encode("utf-8")
+                else:
+                    # Attempt to resolve external base tree from target repository
+                    raw_tree = repo.read_raw_object(delta.base_oid, GitObjectType.TREE)
+                    if raw_tree is not None:
+                        base_tree = GitTree.from_binary_payload(
+                            raw_tree, hash_algo=manifest.hash_algo
+                        )
+                        base_tree_text = base_tree.to_text().encode("utf-8")
+
+                if base_tree_text is not None:
                     binary_payload = apply_text_delta(
                         base_tree_text, delta, hash_algo=manifest.hash_algo
                     )
-                    resolved_trees[delta.target_oid] = GitTree.from_binary_payload(binary_payload)
+                    resolved_trees[delta.target_oid] = GitTree.from_binary_payload(
+                        binary_payload, hash_algo=manifest.hash_algo
+                    )
                     pending_tree_deltas.remove(delta)
                     progress = True
             if not progress:
                 unresolved = sorted({d.target_oid for d in pending_tree_deltas})
                 raise ValueError(
-                    f"Unresolvable tree deltas (missing base objects or circular dependency): {unresolved}"
+                    f"Unresolvable tree deltas (missing base objects in bundle and target repo): {unresolved}"
                 )
 
         for tree in resolved_trees.values():
@@ -143,8 +156,14 @@ def unpack_bundle(
         while pending_blob_deltas:
             progress = False
             for delta in list(pending_blob_deltas):
+                base_payload: bytes | None = None
                 if delta.base_oid in resolved_blobs:
                     base_payload = resolved_blobs[delta.base_oid]
+                else:
+                    # Attempt to resolve external base blob from target repository
+                    base_payload = repo.read_raw_object(delta.base_oid, GitObjectType.BLOB)
+
+                if base_payload is not None:
                     reconstructed = apply_text_delta(
                         base_payload, delta, hash_algo=manifest.hash_algo
                     )
@@ -154,7 +173,7 @@ def unpack_bundle(
             if not progress:
                 unresolved = sorted({d.target_oid for d in pending_blob_deltas})
                 raise ValueError(
-                    f"Unresolvable blob deltas (missing base objects or circular dependency): {unresolved}"
+                    f"Unresolvable blob deltas (missing base objects in bundle and target repo): {unresolved}"
                 )
 
     # Quarantined side-channel objects

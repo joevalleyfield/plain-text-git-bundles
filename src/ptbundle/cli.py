@@ -62,6 +62,12 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Disable plain-text delta compression for blobs and trees",
     )
+    pack_parser.add_argument(
+        "--thin",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Delta-compress against repository basis objects (default: true; use --no-thin to disable)",
+    )
 
     # unpack subcommand
     unpack_parser = subparsers.add_parser(
@@ -107,6 +113,12 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Disable plain-text delta compression for blobs and trees",
     )
+    from_bundle_parser.add_argument(
+        "--thin",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Delta-compress against repository basis objects (default: true; use --no-thin to disable)",
+    )
 
     # to-bundle subcommand
     to_bundle_parser = subparsers.add_parser(
@@ -142,6 +154,7 @@ def cmd_pack(args: argparse.Namespace) -> int:
             args.output,
             whitelist_policy=policy,
             enable_delta=not args.no_delta,
+            thin=args.thin,
         )
         sys.stdout.write(f"Created ptbundle at {args.output}\n")
         sys.stdout.write(f"Target ref: {manifest.refs[0].name} ({manifest.refs[0].oid})\n")
@@ -197,6 +210,7 @@ def cmd_from_bundle(args: argparse.Namespace) -> int:
             repo_path=repo_path,
             whitelist_policy=policy,
             enable_delta=not args.no_delta,
+            thin=args.thin,
         )
         sys.stdout.write(f"Converted Git bundle {args.bundle_file} to ptbundle at {args.output}\n")
         sys.stdout.write(f"Target ref: {manifest.refs[0].name} ({manifest.refs[0].oid})\n")

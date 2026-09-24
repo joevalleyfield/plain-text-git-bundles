@@ -225,22 +225,33 @@ def test_unpack_bundle_with_deltas(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="Blob delta target OID mismatch"):
         unpack_bundle(repo_b, corrupted_blob)
 
-    # 3. Unresolvable tree delta (missing base)
+    # 3. Unresolvable tree delta (missing base in bundle and repo)
     missing_base_tree = tmp_path / "missing_base_tree"
     subprocess.run(["cp", "-r", str(bundle_dir), str(missing_base_tree)], check=True)
-    # Remove all full trees so delta has no base
-    for tf in (missing_base_tree / "trees").rglob("*.txt"):
-        if not tf.name.endswith(".delta.txt"):
-            tf.unlink()
+    for tf in (missing_base_tree / "trees").rglob("*.delta.txt"):
+        text = tf.read_text(encoding="utf-8")
+        # Change base OID to nonexistent OID
+        lines = text.splitlines()
+        for idx, line in enumerate(lines):
+            if line.startswith("base: "):
+                lines[idx] = "base: " + "7" * 40
+                break
+        tf.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        break
     with pytest.raises(ValueError, match="Unresolvable tree deltas"):
         unpack_bundle(repo_b, missing_base_tree)
 
-    # 4. Unresolvable blob delta (missing base)
+    # 4. Unresolvable blob delta (missing base in bundle and repo)
     missing_base_blob = tmp_path / "missing_base_blob"
     subprocess.run(["cp", "-r", str(bundle_dir), str(missing_base_blob)], check=True)
-    # Remove all full blobs
-    for bf in (missing_base_blob / "blobs").rglob("*"):
-        if bf.is_file() and not bf.name.endswith(".delta.txt"):
-            bf.unlink()
+    for bf in (missing_base_blob / "blobs").rglob("*.delta.txt"):
+        text = bf.read_text(encoding="utf-8")
+        lines = text.splitlines()
+        for idx, line in enumerate(lines):
+            if line.startswith("base: "):
+                lines[idx] = "base: " + "6" * 40
+                break
+        bf.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        break
     with pytest.raises(ValueError, match="Unresolvable blob deltas"):
         unpack_bundle(repo_b, missing_base_blob)

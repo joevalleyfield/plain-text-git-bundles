@@ -84,6 +84,47 @@ class GitRepo:
             check=check,
         )
 
+    def read_raw_object(self, oid: str, obj_type: GitObjectType | None = None) -> bytes | None:
+        """Read a raw object payload from the repository by OID.
+
+        Returns payload bytes if found, or None if missing or wrong type.
+        """
+        type_arg = obj_type.value if obj_type is not None else None
+        if type_arg is not None:
+            proc = self.run_git(["cat-file", type_arg, oid], check=False)
+        else:
+            proc = self.run_git(["cat-file", "-p", oid], check=False)
+
+        if proc.returncode == 0:
+            return proc.stdout
+        return None
+
+    def get_object_at_revision(
+        self,
+        rev: str,
+        path: str,
+        obj_type: GitObjectType,
+    ) -> tuple[str, bytes] | None:
+        """Resolve the OID and raw payload for a path at a given revision/commit.
+
+        Returns (oid, payload) if found, or None if not present or wrong type.
+        """
+        if obj_type == GitObjectType.TREE:
+            target = f"{rev}^{{tree}}" if not path else f"{rev}:{path}"
+        else:
+            if not path:
+                return None
+            target = f"{rev}:{path}"
+
+        proc = self.run_git(["rev-parse", "--verify", target], check=False)
+        if proc.returncode != 0:
+            return None
+        oid = proc.stdout.decode("utf-8").strip()
+        payload = self.read_raw_object(oid, obj_type)
+        if payload is None:
+            return None
+        return oid, payload
+
 
 def discover_delta(
     repo: GitRepo,

@@ -115,6 +115,7 @@ def convert_from_bundle(
     repo_path: Path | str | None = None,
     whitelist_policy: WhitelistPolicy | None = None,
     enable_delta: bool = True,
+    thin: bool = True,
 ) -> Manifest:
     """Convert a canonical Git .bundle file into a plain-text ptbundle directory."""
     b_path = Path(bundle_path).resolve()
@@ -162,6 +163,7 @@ def convert_from_bundle(
             whitelist_policy=whitelist_policy,
             ref_name=target_ref,
             enable_delta=enable_delta,
+            thin=thin,
         )
         return manifest
 
