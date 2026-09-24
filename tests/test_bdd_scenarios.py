@@ -15,6 +15,7 @@ from ptbundle.cli import main
 scenarios("features/delta_transfer.feature")
 scenarios("features/quarantine_sidechannel.feature")
 scenarios("features/ingress_tamper_defense.feature")
+scenarios("features/phase2_interop_deltas.feature")
 
 
 @pytest.fixture
@@ -51,6 +52,20 @@ def step_given_feature_branch_text(bdd_ctx: dict[str, Any]) -> None:
     (src / "feature.txt").write_text("Feature text\n")
     subprocess.run(["git", "add", "feature.txt"], cwd=src, check=True)
     subprocess.run(["git", "commit", "-m", "Feature text commit"], cwd=src, check=True)
+
+
+@given("a source repository with a feature branch")
+def step_given_source_repo_feature_branch(tmp_path: Path, bdd_ctx: dict[str, Any]) -> None:
+    src = _init_git_repo(tmp_path / "src_repo")
+    (src / "base.txt").write_text("Base content\n")
+    subprocess.run(["git", "add", "base.txt"], cwd=src, check=True)
+    subprocess.run(["git", "commit", "-m", "Base commit"], cwd=src, check=True)
+    subprocess.run(["git", "checkout", "-b", "feature"], cwd=src, check=True)
+    (src / "feature.txt").write_text("Feature text\n")
+    subprocess.run(["git", "add", "feature.txt"], cwd=src, check=True)
+    subprocess.run(["git", "commit", "-m", "Feature text commit"], cwd=src, check=True)
+    bdd_ctx["src_repo"] = src
+    bdd_ctx["bundle_dir"] = tmp_path / "bundle"
 
 
 @given('a target repository cloned from "main"')
@@ -382,3 +397,141 @@ def step_then_target_contains_no_refs(bdd_ctx: dict[str, Any]) -> None:
     dst = bdd_ctx["dst_repo"]
     proc = subprocess.run(["git", "show-ref"], cwd=dst, capture_output=True)
     assert proc.stdout.strip() == b""
+
+
+# --- Steps for phase2_interop_deltas.feature ---
+
+
+@given("a source repository with an initial commit containing a multi-file tree")
+def step_given_multi_file_source(tmp_path: Path, bdd_ctx: dict[str, Any]) -> None:
+    src = _init_git_repo(tmp_path / "src_delta_repo")
+    for i in range(12):
+        (src / f"module_{i:02d}.py").write_text(f"# module {i}\n" + "def worker(): pass\n" * 20)
+    subprocess.run(["git", "add", "."], cwd=src, check=True)
+    subprocess.run(["git", "commit", "-m", "Initial tree"], cwd=src, check=True)
+    bdd_ctx["src_repo"] = src
+    bdd_ctx["bundle_dir"] = tmp_path / "ptbundle_delta"
+
+
+@given("multiple successive commits iteratively modifying text files")
+def step_given_iterative_commits(bdd_ctx: dict[str, Any]) -> None:
+    src = bdd_ctx["src_repo"]
+    # Commit 2
+    (src / "module_00.py").write_text("# module 0 updated v2\n" + "def worker(): pass\n" * 20)
+    subprocess.run(["git", "add", "module_00.py"], cwd=src, check=True)
+    subprocess.run(["git", "commit", "-m", "Update module 0 v2"], cwd=src, check=True)
+
+    # Commit 3
+    (src / "module_00.py").write_text("# module 0 updated v3\n" + "def worker(): pass\n" * 20)
+    subprocess.run(["git", "add", "module_00.py"], cwd=src, check=True)
+    subprocess.run(["git", "commit", "-m", "Update module 0 v3"], cwd=src, check=True)
+
+
+@when("I pack the revision delta with plain-text delta compression enabled")
+def step_when_pack_with_deltas(bdd_ctx: dict[str, Any]) -> None:
+    src = bdd_ctx["src_repo"]
+    bundle_dir = bdd_ctx["bundle_dir"]
+    code = main(["--repo", str(src), "pack", "HEAD~2..HEAD", "-o", str(bundle_dir)])
+    assert code == 0
+
+
+@then("the generated bundle should contain delta tree and blob files")
+def step_then_verify_delta_files(bdd_ctx: dict[str, Any]) -> None:
+    bundle_dir = bdd_ctx["bundle_dir"]
+    tree_deltas = list((bundle_dir / "trees").rglob("*.delta.txt"))
+    blob_deltas = list((bundle_dir / "blobs").rglob("*.delta.txt"))
+    assert len(tree_deltas) > 0
+    assert len(blob_deltas) > 0
+
+
+@then(
+    "unpacking the bundle into a target repository reproduces the exact Git commits and tree state"
+)
+def step_then_unpack_and_verify_exact(tmp_path: Path, bdd_ctx: dict[str, Any]) -> None:
+    src = bdd_ctx["src_repo"]
+    bundle_dir = bdd_ctx["bundle_dir"]
+    dst = tmp_path / "dst_delta_repo"
+    subprocess.run(
+        ["git", "clone", "--branch", "main", "--single-branch", str(src), str(dst)],
+        capture_output=True,
+        check=True,
+    )
+    # Reset dst back to base commit HEAD~2
+    subprocess.run(["git", "reset", "--hard", "HEAD~2"], cwd=dst, check=True, capture_output=True)
+
+    code = main(["--repo", str(dst), "unpack", str(bundle_dir)])
+    assert code == 0
+
+    # Reset working tree to updated main and check exact byte match
+    subprocess.run(["git", "reset", "--hard", "main"], cwd=dst, check=True, capture_output=True)
+    assert (dst / "module_00.py").read_text() == (src / "module_00.py").read_text()
+    src_head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=src, capture_output=True).stdout
+    dst_head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=dst, capture_output=True).stdout
+    assert src_head == dst_head
+
+
+@given("a canonical Git bundle created from the feature branch")
+def step_given_canonical_git_bundle(tmp_path: Path, bdd_ctx: dict[str, Any]) -> None:
+    src = bdd_ctx["src_repo"]
+    git_bundle = tmp_path / "canonical.bundle"
+    subprocess.run(
+        ["git", "bundle", "create", str(git_bundle), "feature"],
+        cwd=src,
+        check=True,
+        capture_output=True,
+    )
+    bdd_ctx["git_bundle"] = git_bundle
+
+
+@when("I convert the canonical Git bundle into a ptbundle directory")
+def step_when_convert_from_git_bundle(tmp_path: Path, bdd_ctx: dict[str, Any]) -> None:
+    src = bdd_ctx["src_repo"]
+    git_bundle = bdd_ctx["git_bundle"]
+    pt_dir = tmp_path / "converted_ptbundle"
+    code = main(["--repo", str(src), "from-bundle", str(git_bundle), "-o", str(pt_dir)])
+    assert code == 0
+    bdd_ctx["converted_ptbundle"] = pt_dir
+
+
+@when("I convert the ptbundle directory back into a canonical Git bundle")
+def step_when_convert_to_git_bundle(tmp_path: Path, bdd_ctx: dict[str, Any]) -> None:
+    src = bdd_ctx["src_repo"]
+    pt_dir = bdd_ctx["converted_ptbundle"]
+    synth_bundle = tmp_path / "synthesized.bundle"
+    code = main(["--repo", str(src), "to-bundle", str(pt_dir), "-o", str(synth_bundle)])
+    assert code == 0
+    bdd_ctx["synth_bundle"] = synth_bundle
+
+
+@then("the synthesized Git bundle passes canonical git bundle verification")
+def step_then_verify_synthesized_bundle(bdd_ctx: dict[str, Any]) -> None:
+    src = bdd_ctx["src_repo"]
+    synth_bundle = bdd_ctx["synth_bundle"]
+    proc = subprocess.run(
+        ["git", "bundle", "verify", str(synth_bundle)],
+        cwd=src,
+        capture_output=True,
+        text=True,
+    )
+    assert proc.returncode == 0
+    assert "is okay" in proc.stdout or "is okay" in proc.stderr
+
+
+@then("cloning from the synthesized Git bundle matches the source repository")
+def step_then_clone_from_synthesized_bundle(tmp_path: Path, bdd_ctx: dict[str, Any]) -> None:
+    src = bdd_ctx["src_repo"]
+    synth_bundle = bdd_ctx["synth_bundle"]
+    clone_dir = tmp_path / "clone_from_synth"
+    subprocess.run(
+        ["git", "clone", "-b", "feature", str(synth_bundle), str(clone_dir)],
+        capture_output=True,
+        check=True,
+    )
+    src_feat = subprocess.run(
+        ["git", "rev-parse", "refs/heads/feature"], cwd=src, capture_output=True
+    ).stdout.strip()
+    clone_head = subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=clone_dir, capture_output=True
+    ).stdout.strip()
+    assert src_feat == clone_head
+    assert (clone_dir / "feature.txt").read_text() == "Feature text\n"

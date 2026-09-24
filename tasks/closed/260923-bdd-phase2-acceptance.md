@@ -3,7 +3,7 @@ FKA:
 AKA: phase 2 bdd; delta and bridge acceptance scenarios
 Legacy index:
 
-keywords: bdd, acceptance, active, correctness, contract
+keywords: bdd, acceptance, closed, correctness, contract
 
 Parent:
 Depends on: `260923-delta-pack-unpack-integration`, `260923-git-bundle-bridge`
@@ -22,7 +22,7 @@ Implement end-to-end BDD acceptance scenarios verifying bidirectional Git bundle
   - Extension whitelisting and spoofing rejection.
   - Quarantine side-channel reconciliation.
   - Multi-commit linear history.
-- No acceptance scenarios exist for `.delta.txt` compression or `from-bundle` / `to-bundle`.
+- Phase 2 scenarios implemented in `tests/features/phase2_interop_deltas.feature` and `tests/test_bdd_scenarios.py`.
 
 ## Desired Reality
 
@@ -44,25 +44,31 @@ Implement end-to-end BDD acceptance scenarios verifying bidirectional Git bundle
 
 ## Gap Analysis
 
-- New BDD scenario tests need to be added to `tests/test_bdd_scenarios.py`.
+- Closed. All BDD scenarios implemented and verified.
 
 ## Transformations
 
-1. Add scenarios to `tests/test_bdd_scenarios.py`.
+1. Add scenarios to `tests/test_bdd_scenarios.py` and `tests/features/phase2_interop_deltas.feature`.
 2. Run full test suite with coverage enforcement.
 
 ## Evidence
 
-- `uv run pytest` passes 100% of tests with 100% statement and branch coverage.
+- Added BDD acceptance scenarios in `tests/features/phase2_interop_deltas.feature` and step definitions in `tests/test_bdd_scenarios.py`:
+  1. Multi-commit text and tree plain-text delta compression with unpack and verification.
+  2. Bidirectional conversion between canonical Git `.bundle` files and plain-text `ptbundle` directories with `git bundle verify` and `git clone`.
+- `uv run pytest`: 85 passed with 100% statement and branch coverage across all 10 modules in `src/ptbundle`.
+- `uv run ruff check .`: clean.
+- `uv run ruff format --check .`: 38 files verified cleanly.
+- `uv run mypy src tests`: clean (21 source files, 0 issues).
 
 ## Decisions
 
-- **Full Ecosystem Interop**: The BDD test must invoke both `git` and `ptbundle` CLI binaries to verify real-world interoperability.
+- **Full Ecosystem Interop**: The BDD test invokes both `git` and `ptbundle` CLI binaries to verify real-world interoperability.
 
 ## Open Fronts
 
-- None once implemented.
+- None.
 
 ## Next Actions
 
-- Implement BDD acceptance scenarios.
+- None; task completed.
