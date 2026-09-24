@@ -3,7 +3,7 @@ FKA:
 AKA: git bundle interop; from-bundle; to-bundle; bundle binary bridge
 Legacy index:
 
-keywords: bundle, cli, tooling, active, compatibility, contract
+keywords: bundle, cli, tooling, closed, compatibility, contract
 
 Parent:
 Depends on: `260922-git-repo-io`
@@ -60,12 +60,17 @@ Implement bidirectional conversion between standard Git `.bundle` binary files a
 
 ## Evidence
 
-- `uv run pytest tests/test_bundle.py` passes with 100% statement and branch coverage.
-- Synthesized `.bundle` files successfully pass `git bundle verify`.
+- `uv run pytest tests/test_bundle.py` passes 4/4 tests with 100.00% statement and branch coverage (105 statements, 36 branches, 0 missing).
+- `uv run pytest tests/test_cli.py` passes 9/9 tests with 100.00% statement and branch coverage (116 statements, 16 branches, 0 missing).
+- `from-bundle` converts Git `.bundle` files to plain-text ptbundle directory trees with delta compression.
+- `to-bundle` converts plain-text ptbundle directory trees to canonical Git `.bundle` files.
+- Synthesized `.bundle` files pass `git bundle verify` bit-exactly with exit code 0.
+- Error handling for invalid headers, corrupted data, non-existent files, and empty headers verified.
 
 ## Decisions
 
 - **Plumbing via Bare Scratch Repos**: Use `tempfile.TemporaryDirectory` with `git init --bare` to isolate all packfile operations, eliminating custom binary packfile parsing.
+- **Reference Normalization**: Raw Git bundle refs (including `HEAD`) are normalized to standard `refs/` paths (`refs/heads/HEAD`) for strict ingress safety.
 
 ## Open Fronts
 
@@ -73,6 +78,4 @@ Implement bidirectional conversion between standard Git `.bundle` binary files a
 
 ## Next Actions
 
-- Implement `src/ptbundle/bundle.py`.
-- Wire CLI subcommands.
-- Implement tests in `tests/test_bundle.py`.
+- Done. Proceed with `260923-bdd-phase2-acceptance`.
