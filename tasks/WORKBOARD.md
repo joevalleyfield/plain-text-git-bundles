@@ -6,7 +6,7 @@
 ## 0. Focus Queue
 
 <!-- WORKBOARD:NOW:START -->
-- _No open tasks._
+- **[`260923-thin-plain-text-bundles`]** **RDD Contract**: `README.md` documents thin plain-text bundles. Default is `--thin` for revision ranges with boundary prerequisites (`base..head`). `...
 <!-- WORKBOARD:NOW:END -->
 
 ## 1. Relationship Tree
