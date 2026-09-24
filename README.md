@@ -95,7 +95,7 @@ Fix edge case in packet parsing
   100755 blob 8f3d82a10b42c9434b8b29ae775ad8c2e48c5391	build.sh
   040000 tree 710f09b2d1d6434b8b29ae775ad8c2e48c539100	src
   ```
-- **Delta Trees (`trees/xx/<sha>.delta.txt`)**: Unified diff against a predecessor tree (e.g. parent commit's tree), showing directory-level additions, deletions, and entry modifications:
+- **Delta Trees (`trees/xx/<sha>.delta.txt`)**: Unified diff against a predecessor tree (either earlier in the bundle or an external basis tree reachable from a prerequisite commit in thin bundles), showing directory-level additions, deletions, and entry modifications:
   ```text
   # ptbundle delta v1
   type: tree
@@ -111,7 +111,7 @@ Fix edge case in packet parsing
 
 ### Blob Representation (`blobs/xx/xxxx.<ext>`)
 - **Full Text Files**: Saved as `<sha>.txt`. Content is the exact UTF-8 file payload.
-- **Delta Text Files (`blobs/xx/<sha>.delta.txt`)**: Saved as a human- and scanner-readable unified diff against a predecessor blob, drastically reducing transfer size for iterative edits:
+- **Delta Text Files (`blobs/xx/<sha>.delta.txt`)**: Saved as a human- and scanner-readable unified diff against a predecessor blob (either earlier in the bundle or an external basis blob reachable from a prerequisite commit in thin bundles), drastically reducing transfer size for iterative edits:
   ```text
   # ptbundle delta v1
   type: blob
@@ -160,7 +160,10 @@ ptbundle pack origin/main..feature-branch \
 ```
 1. Identifies the delta object set via `git rev-list --objects`.
 2. Emits `manifest.txt` with base prerequisites and tip references.
-3. Compresses iterative text blobs and trees into `.delta.txt` when diffs are smaller than full text.
+3. Compresses iterative text blobs and trees into `.delta.txt` when diffs are smaller than full text:
+   - **`--thin` (default)**: Delta-compresses against basis objects in the repository reachable from prerequisite commits (`base..head`), omitting the basis objects from the bundle to minimize transfer size.
+   - **`--no-thin`**: Disables external basis deltas, ensuring all objects lacking an internal basis within the bundle are stored in full (`.txt`) for complete standalone self-containment.
+   - **`--no-delta`**: Disables delta compression entirely.
 4. Partitions commits, trees, and blobs into `commits/`, `trees/`, and `blobs/`.
 5. Routes non-whitelisted binaries to `quarantine/`.
 
@@ -171,7 +174,7 @@ ptbundle unpack ./transfers/feature-xyz-bundle/ \
 ```
 1. **Prerequisite Check**: Validates that the target repository contains all required base commits.
 2. **Cryptographic Verification**: Reconstitutes Git objects from plain-text files and verifies that SHA calculations match the file names.
-3. **Delta Patching**: Reconstitutes `.delta.txt` trees and blobs deterministically, verifying bit-exact OIDs before injection.
+3. **Delta Patching**: Reconstitutes `.delta.txt` trees and blobs deterministically. Base objects are resolved from the bundle or looked up directly in the target repository's object database for thin bundles. Verifies bit-exact OIDs before injection.
 4. **Object Injection**: Writes verified loose objects directly into the target `.git/objects` store.
 5. **Ref Update**: Atomically updates or creates the specified branch reference.
 
