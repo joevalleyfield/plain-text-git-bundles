@@ -69,8 +69,10 @@ ref refs/heads/feature-xyz 1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b
 
 # Summary Metrics
 commits: 3
-trees: 7
-blobs_text: 32
+trees_full: 2
+trees_delta: 5
+blobs_text: 12
+blobs_delta: 20
 blobs_binary: 1
 blobs_quarantined: 0
 ```
@@ -86,16 +88,42 @@ committer Alice Smith <alice@example.com> 1727045000 -0400
 Fix edge case in packet parsing
 ```
 
-### Tree Representation (`trees/xx/xxxx.txt`)
-Formatted using Git's standard tab-separated `ls-tree` notation (clean text, no binary SHA bytes):
-```text
-100644 blob e69de29bb2d1d6434b8b29ae775ad8c2e48c5391	README.md
-100755 blob 8f3d82a10b42c9434b8b29ae775ad8c2e48c5391	build.sh
-040000 tree 710f09b2d1d6434b8b29ae775ad8c2e48c539100	src
-```
+### Tree Representation (`trees/xx/xxxx.txt` or `.delta.txt`)
+- **Full Trees (`trees/xx/<sha>.txt`)**: Formatted using Git's standard tab-separated `ls-tree` notation (clean text, no binary SHA bytes):
+  ```text
+  100644 blob e69de29bb2d1d6434b8b29ae775ad8c2e48c5391	README.md
+  100755 blob 8f3d82a10b42c9434b8b29ae775ad8c2e48c5391	build.sh
+  040000 tree 710f09b2d1d6434b8b29ae775ad8c2e48c539100	src
+  ```
+- **Delta Trees (`trees/xx/<sha>.delta.txt`)**: Unified diff against a predecessor tree (e.g. parent commit's tree), showing directory-level additions, deletions, and entry modifications:
+  ```text
+  # ptbundle delta v1
+  type: tree
+  path: src/
+  base: d8329fc1cc938780ffdd9f94e0d364e0ea74f579
+  target: 9a4e21b0cc938780ffdd9f94e0d364e0ea74f123
+
+  @@ -4,3 +4,3 @@
+   100644 blob e69de29bb2d1d6434b8b29ae775ad8c2e48c5391	__init__.py
+  -100644 blob a1b2c3d4e5f678901234567890abcdef12345678	cli.py
+  +100644 blob 4f8a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a	cli.py
+  ```
 
 ### Blob Representation (`blobs/xx/xxxx.<ext>`)
-- **Text Files**: Saved as `<sha>.txt`. Content is the exact file payload.
+- **Full Text Files**: Saved as `<sha>.txt`. Content is the exact UTF-8 file payload.
+- **Delta Text Files (`blobs/xx/<sha>.delta.txt`)**: Saved as a human- and scanner-readable unified diff against a predecessor blob, drastically reducing transfer size for iterative edits:
+  ```text
+  # ptbundle delta v1
+  type: blob
+  path: src/ptbundle/cli.py
+  base: e69de29bb2d1d6434b8b29ae775ad8c2e48c5391
+  target: 4f8a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a
+
+  @@ -15,3 +15,5 @@
+   unchanged context line
+  +new line 1
+  +new line 2
+  ```
 - **Whitelisted Binaries**: Saved with their native extension (e.g. `<sha>.png`). The payload is preserved uncompressed as-is so binary sanitizers and virus scanners can inspect the raw bytes.
 
 ---
@@ -108,7 +136,7 @@ In secure ingress boundaries, binary assets must be treated with care:
                       [ git rev-list delta ]
                                 │
                  Is blob UTF-8 plain text?
-                    ├── YES ──► blobs/xx/<sha>.txt
+                    ├── YES ──► Emit .txt (or .delta.txt if smaller)
                     └── NO  ──► Check Whitelist
                                   ├── ON WHITELIST  ──► blobs/xx/<sha>.<ext>
                                   └── NOT ALLOWED   ──► quarantine/
@@ -116,7 +144,7 @@ In secure ingress boundaries, binary assets must be treated with care:
                                                            └── quarantine-manifest.txt
 ```
 
-1. **Fast-Path Text**: UTF-8 code and configuration travel directly through text-only ingress filters.
+1. **Fast-Path Text**: UTF-8 code and configuration travel directly through text-only ingress filters as full text or readable unified diffs.
 2. **Whitelisted Binaries**: Allowed formats (e.g. `.png`, `.jpg`, `.pdf`, `.json`) travel as raw files with their natural extensions for inspection by dedicated file validators.
 3. **Quarantine (Side-Channel)**: Disallowed or high-risk binaries are diverted to a separate `quarantine/` package with an audit manifest. These can be burned to optical media (CD-R) or sent through manual inspection workflows before being merged at the destination.
 
@@ -132,8 +160,9 @@ ptbundle pack origin/main..feature-branch \
 ```
 1. Identifies the delta object set via `git rev-list --objects`.
 2. Emits `manifest.txt` with base prerequisites and tip references.
-3. Partitions commits, trees, and blobs into `commits/`, `trees/`, and `blobs/`.
-4. Routes non-whitelisted binaries to `quarantine/`.
+3. Compresses iterative text blobs and trees into `.delta.txt` when diffs are smaller than full text.
+4. Partitions commits, trees, and blobs into `commits/`, `trees/`, and `blobs/`.
+5. Routes non-whitelisted binaries to `quarantine/`.
 
 ### Import / Unpacking (Target / Ingress Side)
 ```bash
@@ -142,8 +171,21 @@ ptbundle unpack ./transfers/feature-xyz-bundle/ \
 ```
 1. **Prerequisite Check**: Validates that the target repository contains all required base commits.
 2. **Cryptographic Verification**: Reconstitutes Git objects from plain-text files and verifies that SHA calculations match the file names.
-3. **Object Injection**: Writes verified loose objects directly into the target `.git/objects` store.
-4. **Ref Update**: Atomically updates or creates the specified branch reference.
+3. **Delta Patching**: Reconstitutes `.delta.txt` trees and blobs deterministically, verifying bit-exact OIDs before injection.
+4. **Object Injection**: Writes verified loose objects directly into the target `.git/objects` store.
+5. **Ref Update**: Atomically updates or creates the specified branch reference.
+
+### Native Git Bundle Interoperability
+
+Convert between canonical Git `.bundle` binary files and plain-text `ptbundle` directories without checking out branches:
+
+```bash
+# Convert a canonical Git bundle into an auditable plain-text bundle
+ptbundle from-bundle ./feature.bundle --output ./transfers/feature-xyz-bundle/
+
+# Synthesize a canonical Git bundle from an inspected plain-text bundle
+ptbundle to-bundle ./transfers/feature-xyz-bundle/ --output ./feature.bundle
+```
 
 ---
 
@@ -154,8 +196,10 @@ ptbundle unpack ./transfers/feature-xyz-bundle/ \
   - Bit-exact SHA-1 and SHA-256 tree/commit/blob verification against canonical Git.
   - Support for delta packs (`base..head`), text blobs, and whitelisted extensions.
   - Quarantine generation and side-channel reconciliation.
-- **Phase 2: Ingress Hardening & Policy Hooks**
-  - Pluggable validator hooks (regex scanning, line-ending normalization checks, file size caps).
-  - Integration with cross-domain file verification workflows.
+- **Phase 2: Tooling Interop & Plain-Text Delta Compression**
+  - **Git Bundle Bridge**: Bidirectional conversion between `.bundle` binaries and `ptbundle` directories (`from-bundle` and `to-bundle`).
+  - **CVS/RCS-Style Delta Engine**: Plain-text unified diffs for iterative text blobs and trees with byte-exact Git OID validation and EOF handling.
+  - **Size & Performance Optimization**: Drastically smaller bundle footprints for deep histories while preserving 100% human and scanner readability.
 - **Phase 3: Standalone Native Binary (Rust/Go)**
   - Single statically linked binary for environments where Python interpreters are restricted.
+
