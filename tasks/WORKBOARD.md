@@ -9,7 +9,6 @@
 - **[`260923-bdd-phase2-acceptance`]** **Delta Compression Acceptance Scenario**: Create a realistic repository history with multiple commits iteratively modifying wide directory trees and ...
 - **[`260923-delta-pack-unpack-integration`]** **Pack Integration (`src/ptbundle/pack.py`)**: Track commit parent/child relationships in the rev-list to identify path-level ancestor blobs and trees...
 - **[`260923-git-bundle-bridge`]** **`from-bundle` Subcommand**: `ptbundle from-bundle <bundle_file> -o <ptbundle_dir> [--whitelist-ext ...]` Unpacks the bundle into an isolated tempora...
-- **[`260923-plain-text-delta-engine`]** A new module `src/ptbundle/delta.py` providing: **`TextDelta` Data Class**: Fields: `object_type: GitObjectType`, `path: str`, `base_oid: str`, `targe...
 <!-- WORKBOARD:NOW:END -->
 
 ## 1. Relationship Tree
@@ -20,7 +19,7 @@
 <!-- WORKBOARD:RELATIONSHIP_ROOTS:END -->
 
 <!-- WORKBOARD:RELATIONSHIP_TREE:START -->
-- `260923-plain-text-delta-engine`: A new module `src/ptbundle/delta.py` providing: **`TextDelta` Data Class**: Fields: `object_type: GitObjectType`, `path: str`, `base_oid: str`, `targe... (depends on `260922-git-object-model`; blocks `260923-delta-pack-unpack-integration`; related `260923-git-bundle-bridge`)
+- Warning: root `260923-plain-text-delta-engine` not rendered (closed task).
 - `260923-git-bundle-bridge`: **`from-bundle` Subcommand**: `ptbundle from-bundle <bundle_file> -o <ptbundle_dir> [--whitelist-ext ...]` Unpacks the bundle into an isolated tempora... (depends on `260922-git-repo-io`; blocks `260923-bdd-phase2-acceptance`; related `260923-delta-pack-unpack-integration`)
 <!-- WORKBOARD:RELATIONSHIP_TREE:END -->
 
@@ -33,6 +32,7 @@
 ## 3. Recent Closures
 
 <!-- WORKBOARD:CLOSED:START -->
+- **[`260923-plain-text-delta-engine`]** - `uv run pytest tests/test_delta.py --cov=ptbundle.delta` passes 11/11 tests with 100% statement and branch coverage (2
 - **[`260922-scaffold-project-disciplines`]** - `uv run pytest`: 5 passed in 0.04s with 100% line and branch coverage (`--cov-fail-under=100`).
 - **[`260922-pack-unpack-orchestrators`]** - `uv run pytest`: 55 passed in 1.46s with 100% line and branch coverage (`--cov-fail-under=100`).
 - **[`260922-inspection-quarantine-policy`]** - `uv run pytest`: 44 passed in 0.22s with 100% line and branch coverage (`--cov-fail-under=100`).

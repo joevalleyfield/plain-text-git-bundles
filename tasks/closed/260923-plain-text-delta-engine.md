@@ -3,7 +3,7 @@ FKA:
 AKA: text delta engine; unified diff compression; blob and tree deltas
 Legacy index:
 
-keywords: crypto, implementation, active, correctness, pack, unpack
+keywords: crypto, implementation, closed, correctness, pack, unpack
 
 Parent:
 Depends on: `260922-git-object-model`
@@ -84,8 +84,10 @@ A new module `src/ptbundle/delta.py` providing:
 
 ## Evidence
 
-- `uv run pytest tests/test_delta.py` passes with 100% coverage.
-- All edge cases (empty payloads, missing EOF newline, CRLF, multi-hunk diffs, tree diffs) pass.
+- `uv run pytest tests/test_delta.py --cov=ptbundle.delta` passes 11/11 tests with 100% statement and branch coverage (229 statements, 116 branches, 0 missing).
+- `uv run ruff check` and `uv run ruff format --check` clean.
+- `uv run mypy src/ptbundle/delta.py tests/test_delta.py` clean with no issues.
+- All edge cases (empty payloads, missing EOF newline, CRLF, multi-hunk diffs, binary and text tree diffs) verified.
 
 ## Decisions
 
@@ -98,5 +100,4 @@ A new module `src/ptbundle/delta.py` providing:
 
 ## Next Actions
 
-- Implement `src/ptbundle/delta.py`.
-- Implement `tests/test_delta.py`.
+- Done. Proceed with `260923-delta-pack-unpack-integration`.
