@@ -98,10 +98,20 @@ def test_validate_ref_name_valid_and_invalid() -> None:
 
 def test_manifest_metrics_validation() -> None:
     metrics = ManifestMetrics(
-        commits=3, trees=7, blobs_text=10, blobs_binary=2, blobs_quarantined=1
+        commits=3,
+        trees=7,
+        trees_delta=2,
+        blobs_text=10,
+        blobs_delta=4,
+        blobs_binary=2,
+        blobs_quarantined=1,
     )
     assert metrics.commits == 3
-    assert len(metrics.to_lines()) == 5
+    assert metrics.trees_delta == 2
+    assert metrics.blobs_delta == 4
+    lines = metrics.to_lines()
+    assert "trees_delta: 2" in lines
+    assert "blobs_delta: 4" in lines
 
     with pytest.raises(ValueError, match="Invalid metric commits=-1"):
         ManifestMetrics(commits=-1)

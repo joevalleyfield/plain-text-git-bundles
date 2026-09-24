@@ -55,6 +55,11 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="EXTENSIONS",
         help="Comma-separated list of allowed binary file extensions (e.g. png,jpg,svg)",
     )
+    pack_parser.add_argument(
+        "--no-delta",
+        action="store_true",
+        help="Disable plain-text delta compression and store all objects in full",
+    )
 
     # unpack subcommand
     unpack_parser = subparsers.add_parser(
@@ -87,12 +92,17 @@ def cmd_pack(args: argparse.Namespace) -> int:
             args.rev_range,
             args.output,
             whitelist_policy=policy,
+            enable_delta=not args.no_delta,
         )
         sys.stdout.write(f"Created ptbundle at {args.output}\n")
         sys.stdout.write(f"Target ref: {manifest.refs[0].name} ({manifest.refs[0].oid})\n")
         sys.stdout.write(f"Commits: {manifest.metrics.commits}\n")
         sys.stdout.write(f"Trees: {manifest.metrics.trees}\n")
+        if manifest.metrics.trees_delta > 0:
+            sys.stdout.write(f"Trees (delta): {manifest.metrics.trees_delta}\n")
         sys.stdout.write(f"Blobs (text): {manifest.metrics.blobs_text}\n")
+        if manifest.metrics.blobs_delta > 0:
+            sys.stdout.write(f"Blobs (delta): {manifest.metrics.blobs_delta}\n")
         sys.stdout.write(f"Blobs (binary): {manifest.metrics.blobs_binary}\n")
         sys.stdout.write(f"Blobs (quarantined): {manifest.metrics.blobs_quarantined}\n")
         return 0

@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from ptbundle.delta import TextDelta, apply_text_delta
 from ptbundle.manifest import Manifest, ManifestMetrics
 from ptbundle.objects import GitCommit, GitObjectType, GitTree, compute_oid
 from ptbundle.policy import QuarantineManifest, load_sidechannel_objects
@@ -53,33 +54,108 @@ def unpack_bundle(
                 )
             objects_to_inject.append((GitObjectType.COMMIT, commit.to_payload()))
 
-    # Trees
+    # Trees (Full and Delta)
     trees_dir = b_dir / "trees"
     if trees_dir.is_dir():
+        resolved_trees: dict[str, GitTree] = {}
+        pending_tree_deltas: list[TextDelta] = []
+
         for file in trees_dir.rglob("*.txt"):
-            expected_oid = file.parent.name + file.stem
-            tree_text = file.read_text(encoding="utf-8")
-            tree = GitTree.from_text(tree_text, hash_algo=manifest.hash_algo)
-            if tree.oid != expected_oid:
-                raise ValueError(
-                    f"Tree OID mismatch in {file.name}: expected {expected_oid}, computed {tree.oid}"
+            if file.name.endswith(".delta.txt"):
+                rest = file.name[:-10]
+                expected_oid = file.parent.name + rest
+                delta = TextDelta.from_text(
+                    file.read_text(encoding="utf-8"),
+                    hash_algo=manifest.hash_algo,
                 )
+                if delta.target_oid != expected_oid:
+                    raise ValueError(
+                        f"Tree delta target OID mismatch in {file.name}: expected {expected_oid}, found {delta.target_oid}"
+                    )
+                pending_tree_deltas.append(delta)
+            else:
+                expected_oid = file.parent.name + file.stem
+                tree_text = file.read_text(encoding="utf-8")
+                tree = GitTree.from_text(tree_text, hash_algo=manifest.hash_algo)
+                if tree.oid != expected_oid:
+                    raise ValueError(
+                        f"Tree OID mismatch in {file.name}: expected {expected_oid}, computed {tree.oid}"
+                    )
+                resolved_trees[expected_oid] = tree
+
+        # Topologically resolve tree deltas
+        while pending_tree_deltas:
+            progress = False
+            for delta in list(pending_tree_deltas):
+                if delta.base_oid in resolved_trees:
+                    base_tree = resolved_trees[delta.base_oid]
+                    base_tree_text = base_tree.to_text().encode("utf-8")
+                    binary_payload = apply_text_delta(
+                        base_tree_text, delta, hash_algo=manifest.hash_algo
+                    )
+                    resolved_trees[delta.target_oid] = GitTree.from_binary_payload(binary_payload)
+                    pending_tree_deltas.remove(delta)
+                    progress = True
+            if not progress:
+                unresolved = sorted({d.target_oid for d in pending_tree_deltas})
+                raise ValueError(
+                    f"Unresolvable tree deltas (missing base objects or circular dependency): {unresolved}"
+                )
+
+        for tree in resolved_trees.values():
             objects_to_inject.append((GitObjectType.TREE, tree.to_binary_payload()))
 
-    # Blobs
+    # Blobs (Full, Delta, and Quarantined)
     blobs_dir = b_dir / "blobs"
+    resolved_blobs: dict[str, bytes] = {}
+    pending_blob_deltas: list[TextDelta] = []
+
     if blobs_dir.is_dir():
         for file in blobs_dir.rglob("*"):
             if not file.is_file() or file.name.startswith("."):
                 continue
-            expected_oid = file.parent.name + file.stem
-            payload = file.read_bytes()
-            computed_oid = compute_oid(GitObjectType.BLOB, payload, hash_algo=manifest.hash_algo)
-            if computed_oid != expected_oid:
-                raise ValueError(
-                    f"Blob OID mismatch in {file.name}: expected {expected_oid}, computed {computed_oid}"
+
+            if file.name.endswith(".delta.txt"):
+                rest = file.name[:-10]
+                expected_oid = file.parent.name + rest
+                delta = TextDelta.from_text(
+                    file.read_text(encoding="utf-8"),
+                    hash_algo=manifest.hash_algo,
                 )
-            objects_to_inject.append((GitObjectType.BLOB, payload))
+                if delta.target_oid != expected_oid:
+                    raise ValueError(
+                        f"Blob delta target OID mismatch in {file.name}: expected {expected_oid}, found {delta.target_oid}"
+                    )
+                pending_blob_deltas.append(delta)
+            else:
+                expected_oid = file.parent.name + file.stem
+                payload = file.read_bytes()
+                computed_oid = compute_oid(
+                    GitObjectType.BLOB, payload, hash_algo=manifest.hash_algo
+                )
+                if computed_oid != expected_oid:
+                    raise ValueError(
+                        f"Blob OID mismatch in {file.name}: expected {expected_oid}, computed {computed_oid}"
+                    )
+                resolved_blobs[expected_oid] = payload
+
+        # Topologically resolve blob deltas
+        while pending_blob_deltas:
+            progress = False
+            for delta in list(pending_blob_deltas):
+                if delta.base_oid in resolved_blobs:
+                    base_payload = resolved_blobs[delta.base_oid]
+                    reconstructed = apply_text_delta(
+                        base_payload, delta, hash_algo=manifest.hash_algo
+                    )
+                    resolved_blobs[delta.target_oid] = reconstructed
+                    pending_blob_deltas.remove(delta)
+                    progress = True
+            if not progress:
+                unresolved = sorted({d.target_oid for d in pending_blob_deltas})
+                raise ValueError(
+                    f"Unresolvable blob deltas (missing base objects or circular dependency): {unresolved}"
+                )
 
     # Quarantined side-channel objects
     if manifest.metrics.blobs_quarantined > 0:
@@ -102,8 +178,11 @@ def unpack_bundle(
             manifest=q_manifest,
             hash_algo=manifest.hash_algo,
         )
-        for _oid, payload in sidechannel_objects.items():
-            objects_to_inject.append((GitObjectType.BLOB, payload))
+        for oid, payload in sidechannel_objects.items():
+            resolved_blobs[oid] = payload
+
+    for payload in resolved_blobs.values():
+        objects_to_inject.append((GitObjectType.BLOB, payload))
 
     # 3. Object injection (Phase 2)
     for obj_type, payload in objects_to_inject:

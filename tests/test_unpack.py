@@ -151,3 +151,96 @@ def test_unpack_bundle_missing_subdirectories(tmp_path: Path) -> None:
     result = unpack_bundle(repo_b, bundle_dir)
     assert result.objects_injected == 0
     assert result.target_ref == "refs/heads/empty"
+
+
+def test_unpack_bundle_with_deltas(tmp_path: Path) -> None:
+    repo_a_dir = tmp_path / "delta_repo_a"
+    repo_a_dir.mkdir()
+    subprocess.run(["git", "init", "-b", "main"], cwd=repo_a_dir, capture_output=True, check=True)
+    subprocess.run(["git", "config", "user.name", "Tester A"], cwd=repo_a_dir, check=True)
+    subprocess.run(["git", "config", "user.email", "a@example.com"], cwd=repo_a_dir, check=True)
+
+    # 15 files
+    for i in range(15):
+        (repo_a_dir / f"file_{i:02d}.txt").write_text(f"content {i}\n" + "line\n" * 100)
+    subprocess.run(["git", "add", "."], cwd=repo_a_dir, check=True)
+    subprocess.run(["git", "commit", "-m", "Commit 1"], cwd=repo_a_dir, check=True)
+
+    # Clone to repo B
+    repo_b_dir = tmp_path / "delta_repo_b"
+    subprocess.run(
+        ["git", "clone", str(repo_a_dir), str(repo_b_dir)], capture_output=True, check=True
+    )
+
+    # Modify file_00.txt in repo A (Commit 2)
+    (repo_a_dir / "file_00.txt").write_text("updated content 0 (commit 2)\n" + "line\n" * 100)
+    subprocess.run(["git", "add", "."], cwd=repo_a_dir, check=True)
+    subprocess.run(["git", "commit", "-m", "Commit 2"], cwd=repo_a_dir, check=True)
+
+    # Modify file_00.txt again in repo A (Commit 3)
+    (repo_a_dir / "file_00.txt").write_text("updated content 0 (commit 3)\n" + "line\n" * 100)
+    subprocess.run(["git", "add", "."], cwd=repo_a_dir, check=True)
+    subprocess.run(["git", "commit", "-m", "Commit 3"], cwd=repo_a_dir, check=True)
+
+    repo_a = GitRepo.discover(repo_a_dir)
+    repo_b = GitRepo.discover(repo_b_dir)
+
+    bundle_dir = tmp_path / "bundle_with_deltas"
+    manifest = pack_bundle(repo_a, "HEAD~2..HEAD", bundle_dir, enable_delta=True)
+    assert manifest.metrics.blobs_delta > 0
+    assert manifest.metrics.trees_delta > 0
+
+    # Unpack into repo B
+    res = unpack_bundle(repo_b, bundle_dir)
+    assert res.objects_injected > 0
+
+    # Checkout and verify
+    subprocess.run(
+        ["git", "reset", "--hard", "main"], cwd=repo_b.root, capture_output=True, check=True
+    )
+    assert (
+        repo_b.root / "file_00.txt"
+    ).read_text() == "updated content 0 (commit 3)\n" + "line\n" * 100
+
+    # Test error cases for deltas:
+    # 1. Tree delta target OID mismatch
+    corrupted_tree = tmp_path / "corrupted_tree_delta"
+    subprocess.run(["cp", "-r", str(bundle_dir), str(corrupted_tree)], check=True)
+    for td in (corrupted_tree / "trees").rglob("*.delta.txt"):
+        text = td.read_text(encoding="utf-8")
+        full_oid = td.parent.name + td.name[:-10]
+        td.write_text(text.replace("target: " + full_oid, "target: " + "9" * 40))
+        break
+    with pytest.raises(ValueError, match="Tree delta target OID mismatch"):
+        unpack_bundle(repo_b, corrupted_tree)
+
+    # 2. Blob delta target OID mismatch
+    corrupted_blob = tmp_path / "corrupted_blob_delta"
+    subprocess.run(["cp", "-r", str(bundle_dir), str(corrupted_blob)], check=True)
+    for bd in (corrupted_blob / "blobs").rglob("*.delta.txt"):
+        text = bd.read_text(encoding="utf-8")
+        full_oid = bd.parent.name + bd.name[:-10]
+        bd.write_text(text.replace("target: " + full_oid, "target: " + "8" * 40))
+        break
+    with pytest.raises(ValueError, match="Blob delta target OID mismatch"):
+        unpack_bundle(repo_b, corrupted_blob)
+
+    # 3. Unresolvable tree delta (missing base)
+    missing_base_tree = tmp_path / "missing_base_tree"
+    subprocess.run(["cp", "-r", str(bundle_dir), str(missing_base_tree)], check=True)
+    # Remove all full trees so delta has no base
+    for tf in (missing_base_tree / "trees").rglob("*.txt"):
+        if not tf.name.endswith(".delta.txt"):
+            tf.unlink()
+    with pytest.raises(ValueError, match="Unresolvable tree deltas"):
+        unpack_bundle(repo_b, missing_base_tree)
+
+    # 4. Unresolvable blob delta (missing base)
+    missing_base_blob = tmp_path / "missing_base_blob"
+    subprocess.run(["cp", "-r", str(bundle_dir), str(missing_base_blob)], check=True)
+    # Remove all full blobs
+    for bf in (missing_base_blob / "blobs").rglob("*"):
+        if bf.is_file() and not bf.name.endswith(".delta.txt"):
+            bf.unlink()
+    with pytest.raises(ValueError, match="Unresolvable blob deltas"):
+        unpack_bundle(repo_b, missing_base_blob)

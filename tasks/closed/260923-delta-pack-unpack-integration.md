@@ -3,7 +3,7 @@ FKA:
 AKA: delta pack and unpack; delta wire format; manifest delta metrics
 Legacy index:
 
-keywords: pack, unpack, integration, active, contract, usability
+keywords: pack, unpack, integration, closed, contract, usability
 
 Parent:
 Depends on: `260923-plain-text-delta-engine`
@@ -63,7 +63,13 @@ Integrate the plain-text delta engine into `pack_bundle` and `unpack_bundle`, up
 
 ## Evidence
 
-- `uv run pytest` passes with 100% statement and branch coverage.
+- `uv run pytest` passes 77/77 tests with 100.00% statement and branch coverage (1213 statements, 468 branches, 0 missing).
+- `uv run ruff check .` and `uv run ruff format --check .` clean.
+- `uv run mypy src tests` clean with no issues.
+- Pack with delta compression emits `.delta.txt` files and updates manifest metrics (`trees_delta`, `blobs_delta`).
+- Pack with `--no-delta` bypasses delta compression cleanly.
+- Unpack topologically resolves tree and blob delta chains, verifying hashes and injecting reconstituted objects.
+- Error handling for corrupted delta targets and missing base objects verified.
 
 ## Decisions
 
@@ -75,6 +81,4 @@ Integrate the plain-text delta engine into `pack_bundle` and `unpack_bundle`, up
 
 ## Next Actions
 
-- Implement manifest metric updates.
-- Wire delta candidate selection into `pack.py`.
-- Wire topological delta resolution into `unpack.py`.
+- Done. Proceed with `260923-git-bundle-bridge`.

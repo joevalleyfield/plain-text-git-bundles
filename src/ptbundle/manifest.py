@@ -99,7 +99,9 @@ class ManifestMetrics:
 
     commits: int = 0
     trees: int = 0
+    trees_delta: int = 0
     blobs_text: int = 0
+    blobs_delta: int = 0
     blobs_binary: int = 0
     blobs_quarantined: int = 0
 
@@ -107,7 +109,9 @@ class ManifestMetrics:
         for field_name in (
             "commits",
             "trees",
+            "trees_delta",
             "blobs_text",
+            "blobs_delta",
             "blobs_binary",
             "blobs_quarantined",
         ):
@@ -118,13 +122,22 @@ class ManifestMetrics:
                 )
 
     def to_lines(self) -> list[str]:
-        return [
+        lines = [
             f"commits: {self.commits}",
             f"trees: {self.trees}",
-            f"blobs_text: {self.blobs_text}",
-            f"blobs_binary: {self.blobs_binary}",
-            f"blobs_quarantined: {self.blobs_quarantined}",
         ]
+        if self.trees_delta > 0:
+            lines.append(f"trees_delta: {self.trees_delta}")
+        lines.append(f"blobs_text: {self.blobs_text}")
+        if self.blobs_delta > 0:
+            lines.append(f"blobs_delta: {self.blobs_delta}")
+        lines.extend(
+            [
+                f"blobs_binary: {self.blobs_binary}",
+                f"blobs_quarantined: {self.blobs_quarantined}",
+            ]
+        )
+        return lines
 
 
 @dataclass
@@ -293,7 +306,9 @@ class Manifest:
         metrics = ManifestMetrics(
             commits=metric_values.get("commits", 0),
             trees=metric_values.get("trees", 0),
+            trees_delta=metric_values.get("trees_delta", 0),
             blobs_text=metric_values.get("blobs_text", 0),
+            blobs_delta=metric_values.get("blobs_delta", 0),
             blobs_binary=metric_values.get("blobs_binary", 0),
             blobs_quarantined=metric_values.get("blobs_quarantined", 0),
         )

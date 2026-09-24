@@ -105,3 +105,31 @@ def test_cli_unpack_error(tmp_path: Path, capsys: pytest.CaptureFixture[str]) ->
     assert code == 1
     captured = capsys.readouterr()
     assert "Error unpacking bundle" in captured.err
+
+
+def test_cli_pack_with_deltas(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    repo_dir = tmp_path / "cli_delta_repo"
+    repo_dir.mkdir()
+    subprocess.run(["git", "init", "-b", "main"], cwd=repo_dir, capture_output=True, check=True)
+    subprocess.run(["git", "config", "user.name", "Tester"], cwd=repo_dir, check=True)
+    subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=repo_dir, check=True)
+
+    for i in range(10):
+        (repo_dir / f"f_{i}.txt").write_text(f"line {i}\n" + "ctx\n" * 100)
+    subprocess.run(["git", "add", "."], cwd=repo_dir, check=True)
+    subprocess.run(["git", "commit", "-m", "C1"], cwd=repo_dir, check=True)
+
+    (repo_dir / "f_0.txt").write_text("mod 1\n" + "ctx\n" * 100)
+    subprocess.run(["git", "add", "."], cwd=repo_dir, check=True)
+    subprocess.run(["git", "commit", "-m", "C2"], cwd=repo_dir, check=True)
+
+    (repo_dir / "f_0.txt").write_text("mod 2\n" + "ctx\n" * 100)
+    subprocess.run(["git", "add", "."], cwd=repo_dir, check=True)
+    subprocess.run(["git", "commit", "-m", "C3"], cwd=repo_dir, check=True)
+
+    bundle_dir = tmp_path / "cli_delta_bundle"
+    code = main(["--repo", str(repo_dir), "pack", "HEAD~2..HEAD", "-o", str(bundle_dir)])
+    assert code == 0
+    captured = capsys.readouterr()
+    assert "Trees (delta):" in captured.out
+    assert "Blobs (delta):" in captured.out
