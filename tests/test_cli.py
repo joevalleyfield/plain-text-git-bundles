@@ -281,3 +281,33 @@ def test_cli_pack_thin_and_no_thin(tmp_path: Path, capsys: pytest.CaptureFixture
     )
     assert code_from == 0
     assert (bundle_converted / "manifest.txt").is_file()
+
+
+def test_cli_pack_and_unpack_zip(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    repo_a = _setup_test_repo(tmp_path / "repo_a")
+    bundle_zip = tmp_path / "bundle.zip"
+
+    # Pack to zip via CLI
+    code_pack = main(
+        [
+            "--repo",
+            str(repo_a),
+            "pack",
+            "main..feature",
+            "-o",
+            str(bundle_zip),
+        ]
+    )
+    assert code_pack == 0
+    assert bundle_zip.is_file()
+    captured_pack = capsys.readouterr()
+    assert "Created ptbundle" in captured_pack.out
+
+    # Unpack from zip via CLI into clone
+    repo_b = tmp_path / "repo_b"
+    subprocess.run(["git", "clone", str(repo_a), str(repo_b)], capture_output=True, check=True)
+    code_unpack = main(["--repo", str(repo_b), "unpack", str(bundle_zip)])
+    assert code_unpack == 0
+    captured_unpack = capsys.readouterr()
+    assert "Successfully unpacked bundle" in captured_unpack.out
+    assert "Updated ref: refs/heads/feature" in captured_unpack.out

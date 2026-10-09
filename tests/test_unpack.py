@@ -255,3 +255,59 @@ def test_unpack_bundle_with_deltas(tmp_path: Path) -> None:
         break
     with pytest.raises(ValueError, match="Unresolvable blob deltas"):
         unpack_bundle(repo_b, missing_base_blob)
+
+
+def test_unpack_bundle_from_zip(tmp_path: Path) -> None:
+    repo_a, repo_b, _ = _setup_repos(tmp_path)
+    policy = WhitelistPolicy.from_extensions(["png"])
+    zip_bundle = tmp_path / "test_bundle.zip"
+
+    # Pack directly to .zip in Repo A
+    pack_bundle(repo_a, "main..feature", zip_bundle, whitelist_policy=policy)
+
+    # Sidechannel dir from unpack
+    sidechannel = tmp_path / "sidechannel"
+    sidechannel.mkdir()
+    (sidechannel / "quarantined.bin").write_bytes(b"\x00\x01\x02disallowed")
+
+    # Unpack from .zip into Repo B
+    result = unpack_bundle(repo_b, zip_bundle, sidechannel_dir=sidechannel)
+    assert result.target_ref == "refs/heads/feature"
+    assert result.objects_injected > 0
+
+    # Verify repo_b checkout
+    subprocess.run(["git", "checkout", "feature"], cwd=repo_b.root, capture_output=True, check=True)
+    assert (repo_b.root / "new_feature.txt").read_text() == "Feature text\n"
+    assert (repo_b.root / "logo.png").read_bytes() == b"\x89PNG\r\n\x1a\nimage_payload"
+    assert (repo_b.root / "quarantined.bin").read_bytes() == b"\x00\x01\x02disallowed"
+
+
+def test_unpack_bundle_from_zip_errors(tmp_path: Path) -> None:
+    import zipfile
+
+    _, repo_b, _ = _setup_repos(tmp_path)
+
+    # 1. Nonexistent .zip file
+    with pytest.raises(FileNotFoundError, match="Bundle archive not found"):
+        unpack_bundle(repo_b, tmp_path / "nonexistent.zip")
+
+    # 2. Corrupt .zip file
+    corrupt_zip = tmp_path / "corrupt.zip"
+    corrupt_zip.write_bytes(b"not a valid zip file content")
+    with pytest.raises(ValueError, match="Corrupt or invalid zip archive"):
+        unpack_bundle(repo_b, corrupt_zip)
+
+    # 3. Zip missing manifest.txt
+    no_manifest_zip = tmp_path / "no_manifest.zip"
+    with zipfile.ZipFile(no_manifest_zip, "w") as zf:
+        zf.writestr("somefile.txt", b"hello")
+    with pytest.raises(FileNotFoundError, match="missing manifest.txt"):
+        unpack_bundle(repo_b, no_manifest_zip)
+
+    # 4. Zip slip path traversal attempt
+    traversal_zip = tmp_path / "traversal.zip"
+    with zipfile.ZipFile(traversal_zip, "w") as zf:
+        zf.writestr("manifest.txt", b"# ptbundle v1\n")
+        zf.writestr("../evil.txt", b"escaped!")
+    with pytest.raises(ValueError, match="Unsafe zip entry path traversal"):
+        unpack_bundle(repo_b, traversal_zip)

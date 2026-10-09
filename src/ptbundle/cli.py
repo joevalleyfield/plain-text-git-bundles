@@ -48,8 +48,8 @@ def build_parser() -> argparse.ArgumentParser:
         "-o",
         "--output",
         required=True,
-        metavar="OUTPUT_DIR",
-        help="Destination directory for the plain-text bundle",
+        metavar="OUTPUT",
+        help="Destination directory or .zip archive for the plain-text bundle",
     )
     pack_parser.add_argument(
         "--whitelist-ext",
@@ -76,8 +76,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     unpack_parser.add_argument(
         "bundle_dir",
-        metavar="BUNDLE_DIR",
-        help="Path to the plain-text bundle directory",
+        metavar="BUNDLE",
+        help="Path to the plain-text bundle directory or .zip archive",
     )
     unpack_parser.add_argument(
         "--sidechannel",
@@ -88,7 +88,7 @@ def build_parser() -> argparse.ArgumentParser:
     # from-bundle subcommand
     from_bundle_parser = subparsers.add_parser(
         "from-bundle",
-        help="Convert a canonical Git .bundle file into a plain-text ptbundle directory",
+        help="Convert a canonical Git .bundle file into a plain-text ptbundle directory or .zip archive",
     )
     from_bundle_parser.add_argument(
         "bundle_file",
@@ -99,8 +99,8 @@ def build_parser() -> argparse.ArgumentParser:
         "-o",
         "--output",
         required=True,
-        metavar="OUTPUT_DIR",
-        help="Destination directory for the plain-text bundle",
+        metavar="OUTPUT",
+        help="Destination directory or .zip archive for the plain-text bundle",
     )
     from_bundle_parser.add_argument(
         "--whitelist-ext",
@@ -123,12 +123,12 @@ def build_parser() -> argparse.ArgumentParser:
     # to-bundle subcommand
     to_bundle_parser = subparsers.add_parser(
         "to-bundle",
-        help="Convert a plain-text ptbundle directory into a canonical Git .bundle binary file",
+        help="Convert a plain-text ptbundle directory or .zip archive into a canonical Git .bundle binary file",
     )
     to_bundle_parser.add_argument(
         "bundle_dir",
-        metavar="BUNDLE_DIR",
-        help="Path to the plain-text bundle directory",
+        metavar="BUNDLE",
+        help="Path to the plain-text bundle directory or .zip archive",
     )
     to_bundle_parser.add_argument(
         "-o",

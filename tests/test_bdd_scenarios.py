@@ -16,6 +16,7 @@ scenarios("features/delta_transfer.feature")
 scenarios("features/quarantine_sidechannel.feature")
 scenarios("features/ingress_tamper_defense.feature")
 scenarios("features/phase2_interop_deltas.feature")
+scenarios("features/zip_handling.feature")
 
 
 @pytest.fixture
@@ -642,3 +643,40 @@ def step_then_verify_all_full(bdd_ctx: dict[str, Any]) -> None:
     bundle_dir = bdd_ctx["thick_bundle_bdd"]
     assert (bundle_dir / "manifest.txt").is_file()
     assert len(list((bundle_dir / "blobs").rglob("*.txt"))) >= 3
+
+
+@when(parsers.parse('I pack the delta "{rev_range}" into a zip archive'))
+def step_when_pack_delta_zip(rev_range: str, tmp_path: Path, bdd_ctx: dict[str, Any]) -> None:
+    src = bdd_ctx["src_repo"]
+    bundle_zip = tmp_path / "bdd_bundle.zip"
+    code = main(["--repo", str(src), "pack", rev_range, "-o", str(bundle_zip)])
+    assert code == 0
+    bdd_ctx["bundle_zip"] = bundle_zip
+
+
+@when("I unpack the zip archive into the target repository")
+def step_when_unpack_zip_into_target(bdd_ctx: dict[str, Any]) -> None:
+    dst = bdd_ctx["dst_repo"]
+    bundle_zip = bdd_ctx["bundle_zip"]
+    code = main(["--repo", str(dst), "unpack", str(bundle_zip)])
+    assert code == 0
+
+
+@when("I convert the canonical Git bundle into a zip archive")
+def step_when_convert_from_git_bundle_to_zip(tmp_path: Path, bdd_ctx: dict[str, Any]) -> None:
+    src = bdd_ctx["src_repo"]
+    git_bundle = bdd_ctx["git_bundle"]
+    pt_zip = tmp_path / "converted_ptbundle.zip"
+    code = main(["--repo", str(src), "from-bundle", str(git_bundle), "-o", str(pt_zip)])
+    assert code == 0
+    bdd_ctx["converted_ptzip"] = pt_zip
+
+
+@when("I convert the zip archive back into a canonical Git bundle")
+def step_when_convert_zip_to_git_bundle(tmp_path: Path, bdd_ctx: dict[str, Any]) -> None:
+    src = bdd_ctx["src_repo"]
+    pt_zip = bdd_ctx["converted_ptzip"]
+    synth_bundle = tmp_path / "synthesized_from_zip.bundle"
+    code = main(["--repo", str(src), "to-bundle", str(pt_zip), "-o", str(synth_bundle)])
+    assert code == 0
+    bdd_ctx["synth_bundle"] = synth_bundle

@@ -10,6 +10,7 @@ from __future__ import annotations
 import dataclasses
 import subprocess
 import tempfile
+import zipfile
 from pathlib import Path
 
 from ptbundle.manifest import (
@@ -173,13 +174,25 @@ def convert_to_bundle(
     output_bundle: Path | str,
     repo_path: Path | str | None = None,
 ) -> Path:
-    """Convert a plain-text ptbundle directory into a canonical Git .bundle binary file."""
-    b_dir = Path(bundle_dir).resolve()
-    manifest_file = b_dir / "manifest.txt"
-    if not manifest_file.is_file():
-        raise FileNotFoundError(f"Missing manifest.txt in {b_dir}")
+    """Convert a plain-text ptbundle directory or .zip archive into a canonical Git .bundle binary file."""
+    b_path = Path(bundle_dir).resolve()
+    manifest: Manifest
+    if str(bundle_dir).endswith(".zip") or (b_path.is_file() and zipfile.is_zipfile(b_path)):
+        if not b_path.is_file():
+            raise FileNotFoundError(f"Missing bundle archive {b_path}")
+        try:
+            with zipfile.ZipFile(b_path, "r") as zf:
+                if "manifest.txt" not in zf.namelist():
+                    raise FileNotFoundError(f"Missing manifest.txt in {b_path}")
+                manifest = Manifest.from_text(zf.read("manifest.txt").decode("utf-8"))
+        except zipfile.BadZipFile as err:
+            raise ValueError(f"Corrupt or invalid zip archive {b_path}: {err}") from err
+    else:
+        manifest_file = b_path / "manifest.txt"
+        if not manifest_file.is_file():
+            raise FileNotFoundError(f"Missing manifest.txt in {b_path}")
+        manifest = Manifest.from_text(manifest_file.read_text(encoding="utf-8"))
 
-    manifest = Manifest.from_text(manifest_file.read_text(encoding="utf-8"))
     out_bundle = Path(output_bundle).resolve()
     out_bundle.parent.mkdir(parents=True, exist_ok=True)
 
@@ -203,7 +216,7 @@ def convert_to_bundle(
         scratch_repo = GitRepo(root=tmp_path, git_dir=tmp_path)
 
         # Unpack the ptbundle into the scratch repo
-        unpack_bundle(scratch_repo, b_dir)
+        unpack_bundle(scratch_repo, b_path)
 
         # Create git bundle
         bundle_args = ["bundle", "create", str(out_bundle)]

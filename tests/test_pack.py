@@ -214,3 +214,41 @@ def test_pack_bundle_thin_and_no_thin(tmp_path: Path) -> None:
     assert manifest_thick.metrics.blobs_delta == 0
     assert manifest_thick.metrics.trees_delta == 0
     assert len(list(bundle_thick_dir.rglob("*.delta.txt"))) == 0
+
+
+def test_pack_bundle_to_zip(tmp_path: Path) -> None:
+    import zipfile
+
+    repo_dir = tmp_path / "repo"
+    repo_dir.mkdir()
+    repo, base_oid, tip_oid = _setup_repo(repo_dir)
+
+    policy = WhitelistPolicy.from_extensions(["png"])
+    zip_bundle = tmp_path / "bundle.zip"
+
+    # Pack directly to .zip file
+    manifest = pack_bundle(repo, "main..feature", zip_bundle, whitelist_policy=policy)
+
+    assert manifest.version == 1
+    assert manifest.refs[0].oid == tip_oid
+    assert zip_bundle.is_file()
+
+    with zipfile.ZipFile(zip_bundle, "r") as zf:
+        names = zf.namelist()
+        assert "manifest.txt" in names
+        assert any(n.startswith("commits/") for n in names)
+        assert any(n.startswith("trees/") for n in names)
+        assert any(n.startswith("blobs/") for n in names)
+        assert "quarantine/quarantine-manifest.txt" in names
+
+    # Also test uncompressed zip
+    zip_stored = tmp_path / "bundle_stored.zip"
+    manifest_stored = pack_bundle(
+        repo,
+        "main..feature",
+        zip_stored,
+        whitelist_policy=policy,
+        zip_compression=zipfile.ZIP_STORED,
+    )
+    assert manifest_stored.refs[0].oid == tip_oid
+    assert zip_stored.is_file()

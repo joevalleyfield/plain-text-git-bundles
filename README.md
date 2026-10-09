@@ -39,7 +39,7 @@ Every object is verifiable: hashing the canonical Git payload (`<type> <size>\0<
 
 ## 3. Bundle Structure
 
-A plain-text bundle is an uncompressed directory (or archive) structured as follows:
+A plain-text bundle is an uncompressed directory or native `.zip` archive structured as follows:
 
 ```text
 my-feature-delta/
@@ -154,8 +154,14 @@ In secure ingress boundaries, binary assets must be treated with care:
 
 ### Export / Packing (Source / Egress Side)
 ```bash
+# Export as a plain-text directory
 ptbundle pack origin/main..feature-branch \
     --output ./transfers/feature-xyz-bundle/ \
+    --whitelist-ext png,jpg,svg
+
+# Or export directly as a single .zip archive
+ptbundle pack origin/main..feature-branch \
+    --output ./transfers/feature-xyz-bundle.zip \
     --whitelist-ext png,jpg,svg
 ```
 1. Identifies the delta object set via `git rev-list --objects`.
@@ -164,12 +170,17 @@ ptbundle pack origin/main..feature-branch \
    - **`--thin` (default)**: Delta-compresses against basis objects in the repository reachable from prerequisite commits (`base..head`), omitting the basis objects from the bundle to minimize transfer size.
    - **`--no-thin`**: Disables external basis deltas, ensuring all objects lacking an internal basis within the bundle are stored in full (`.txt`) for complete standalone self-containment.
    - **`--no-delta`**: Disables delta compression entirely.
-4. Partitions commits, trees, and blobs into `commits/`, `trees/`, and `blobs/`.
+4. Partitions commits, trees, and blobs into `commits/`, `trees/`, and `blobs/` (written to directory or directly into `.zip`).
 5. Routes non-whitelisted binaries to `quarantine/`.
 
 ### Import / Unpacking (Target / Ingress Side)
 ```bash
+# Unpack from directory
 ptbundle unpack ./transfers/feature-xyz-bundle/ \
+    [--sidechannel ./cdrom/quarantine/]
+
+# Or unpack directly from a .zip archive
+ptbundle unpack ./transfers/feature-xyz-bundle.zip \
     [--sidechannel ./cdrom/quarantine/]
 ```
 1. **Prerequisite Check**: Validates that the target repository contains all required base commits.
@@ -180,14 +191,14 @@ ptbundle unpack ./transfers/feature-xyz-bundle/ \
 
 ### Native Git Bundle Interoperability
 
-Convert between canonical Git `.bundle` binary files and plain-text `ptbundle` directories without checking out branches:
+Convert between canonical Git `.bundle` binary files and plain-text `ptbundle` directories or `.zip` archives without checking out branches:
 
 ```bash
-# Convert a canonical Git bundle into an auditable plain-text bundle
-ptbundle from-bundle ./feature.bundle --output ./transfers/feature-xyz-bundle/
+# Convert a canonical Git bundle into an auditable plain-text bundle directory or .zip archive
+ptbundle from-bundle ./feature.bundle --output ./transfers/feature-xyz-bundle.zip
 
-# Synthesize a canonical Git bundle from an inspected plain-text bundle
-ptbundle to-bundle ./transfers/feature-xyz-bundle/ --output ./feature.bundle
+# Synthesize a canonical Git bundle from an inspected plain-text bundle directory or .zip archive
+ptbundle to-bundle ./transfers/feature-xyz-bundle.zip --output ./feature.bundle
 ```
 
 ---

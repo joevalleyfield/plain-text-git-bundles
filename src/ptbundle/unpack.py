@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import tempfile
+import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -10,6 +12,15 @@ from ptbundle.manifest import Manifest, ManifestMetrics
 from ptbundle.objects import GitCommit, GitObjectType, GitTree, compute_oid
 from ptbundle.policy import QuarantineManifest, load_sidechannel_objects
 from ptbundle.repo import GitRepo, inject_loose_object, update_reference, verify_prerequisites
+
+
+def _safe_extract_zip(zf: zipfile.ZipFile, target_dir: Path) -> None:
+    resolved_target = target_dir.resolve()
+    for member in zf.infolist():
+        dest = (target_dir / member.filename).resolve()
+        if not dest.is_relative_to(resolved_target):
+            raise ValueError(f"Unsafe zip entry path traversal: {member.filename}")
+    zf.extractall(target_dir)
 
 
 @dataclass(frozen=True)
@@ -28,7 +39,24 @@ def unpack_bundle(
     sidechannel_dir: Path | str | None = None,
 ) -> UnpackResult:
     """Verify and unpack a plain-text bundle into the target Git repository."""
-    b_dir = Path(bundle_dir).resolve()
+    bundle_path = Path(bundle_dir).resolve()
+    if str(bundle_dir).endswith(".zip") or (
+        bundle_path.is_file() and zipfile.is_zipfile(bundle_path)
+    ):
+        if not bundle_path.is_file():
+            raise FileNotFoundError(f"Bundle archive not found: {bundle_path}")
+        try:
+            with zipfile.ZipFile(bundle_path, "r") as zf:
+                if "manifest.txt" not in zf.namelist():
+                    raise FileNotFoundError(f"Bundle archive missing manifest.txt: {bundle_path}")
+                with tempfile.TemporaryDirectory(prefix="ptbundle-unpack-") as tmpdir:
+                    tmp_path = Path(tmpdir)
+                    _safe_extract_zip(zf, tmp_path)
+                    return unpack_bundle(repo, tmp_path, sidechannel_dir=sidechannel_dir)
+        except zipfile.BadZipFile as err:
+            raise ValueError(f"Corrupt or invalid zip archive {bundle_path}: {err}") from err
+
+    b_dir = bundle_path
     manifest_file = b_dir / "manifest.txt"
     if not manifest_file.is_file():
         raise FileNotFoundError(f"Bundle directory missing manifest.txt: {b_dir}")

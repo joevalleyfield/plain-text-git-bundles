@@ -162,3 +162,63 @@ def test_bundle_conversion_roundtrip(tmp_path: Path) -> None:
     # 6. Verify error on missing manifest.txt
     with pytest.raises(FileNotFoundError, match="Missing manifest.txt"):
         convert_to_bundle(tmp_path / "empty_dir", tmp_path / "out.bundle")
+
+
+def test_convert_bundle_with_zip(tmp_path: Path) -> None:
+    repo_dir = tmp_path / "repo_zip"
+    repo_dir.mkdir()
+    subprocess.run(["git", "init", "-b", "main"], cwd=repo_dir, capture_output=True, check=True)
+    subprocess.run(["git", "config", "user.name", "Tester"], cwd=repo_dir, check=True)
+    subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=repo_dir, check=True)
+
+    (repo_dir / "file.txt").write_text("hello zip bundle\n")
+    subprocess.run(["git", "add", "file.txt"], cwd=repo_dir, check=True)
+    subprocess.run(["git", "commit", "-m", "Commit 1"], cwd=repo_dir, check=True)
+
+    git_bundle = tmp_path / "zip_test.bundle"
+    subprocess.run(
+        ["git", "bundle", "create", str(git_bundle), "main"],
+        cwd=repo_dir,
+        check=True,
+        capture_output=True,
+    )
+
+    # Convert Git bundle directly to .zip ptbundle
+    ptbundle_zip = tmp_path / "converted.zip"
+    manifest = convert_from_bundle(git_bundle, ptbundle_zip)
+    assert manifest.metrics.commits == 1
+    assert ptbundle_zip.is_file()
+
+    # Convert .zip ptbundle back to Git bundle
+    synth_bundle = tmp_path / "synthesized.bundle"
+    convert_to_bundle(ptbundle_zip, synth_bundle)
+    assert synth_bundle.is_file()
+
+    verify_proc = subprocess.run(
+        ["git", "bundle", "verify", str(synth_bundle)],
+        capture_output=True,
+        text=True,
+    )
+    assert verify_proc.returncode == 0
+    assert "is okay" in verify_proc.stdout or "is okay" in verify_proc.stderr
+
+
+def test_convert_to_bundle_zip_errors(tmp_path: Path) -> None:
+    import zipfile
+
+    # 1. Nonexistent zip
+    with pytest.raises(FileNotFoundError, match="Missing bundle archive"):
+        convert_to_bundle(tmp_path / "nonexistent.zip", tmp_path / "out.bundle")
+
+    # 2. Corrupt zip
+    corrupt = tmp_path / "corrupt.zip"
+    corrupt.write_bytes(b"invalid zip bytes")
+    with pytest.raises(ValueError, match="Corrupt or invalid zip archive"):
+        convert_to_bundle(corrupt, tmp_path / "out.bundle")
+
+    # 3. Zip missing manifest.txt
+    no_manifest = tmp_path / "no_manifest.zip"
+    with zipfile.ZipFile(no_manifest, "w") as zf:
+        zf.writestr("test.txt", b"no manifest here")
+    with pytest.raises(FileNotFoundError, match="Missing manifest.txt"):
+        convert_to_bundle(no_manifest, tmp_path / "out.bundle")

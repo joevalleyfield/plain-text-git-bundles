@@ -3,7 +3,7 @@ FKA:
 AKA: native zip archive support; zip bundle packaging and unpacking
 Legacy index:
 
-keywords: pack, unpack, zip, archive, active, contract, usability
+keywords: pack, unpack, zip, archive, closed, contract, usability
 
 Parent:
 Depends on: `260923-thin-plain-text-bundles`
@@ -17,9 +17,10 @@ Add native `.zip` archive handling to `ptbundle.pack` and `ptbundle.unpack` to a
 
 ## Current Reality
 
-- `ptbundle pack` only writes plain-text objects to an unpacked filesystem directory.
-- `ptbundle unpack` only reads plain-text bundles from an unpacked filesystem directory.
-- Users who need single-file distribution must manually zip/unzip bundle directories outside `ptbundle`.
+- `ptbundle pack` outputs directly to a `.zip` archive when `--output` ends with `.zip` using stdlib `zipfile.ZipFile` directly without intermediate disk staging.
+- `ptbundle unpack` accepts `.zip` archives directly as input, performing safe extraction into an isolated temporary scratch directory with strict path-traversal prevention.
+- `ptbundle from-bundle` and `to-bundle` support `.zip` archives interchangeably with directory-based bundles.
+- `README.md` documents native `.zip` packaging and unpacking workflows.
 
 ## Desired Reality
 
@@ -46,7 +47,7 @@ Add native `.zip` archive handling to `ptbundle.pack` and `ptbundle.unpack` to a
 
 ## Gap Analysis
 
-- Open. Implementation, docs, and tests to be completed.
+- Closed. All requirements implemented, documented, and verified.
 
 ## Transformations
 
@@ -62,7 +63,13 @@ Add native `.zip` archive handling to `ptbundle.pack` and `ptbundle.unpack` to a
 
 ## Evidence
 
-- Pending test execution.
+- `uv run pytest`: 98 passed in 5.90s with 100.00% statement and branch coverage across all 10 modules in `src/ptbundle`.
+- `uv run ruff check .`: clean (0 errors).
+- `uv run ruff format --check .`: 40 files already formatted.
+- `uv run mypy src tests`: clean (0 issues across 21 source files).
+- Executable BDD scenarios passing:
+  - `Pack a delta directly to a .zip archive and unpack into target repo`
+  - `Convert canonical Git bundle to a .zip archive and back`
 
 ## Decisions
 
@@ -75,4 +82,4 @@ Add native `.zip` archive handling to `ptbundle.pack` and `ptbundle.unpack` to a
 
 ## Next Actions
 
-- Open task and sync workboard.
+- Fold closure into feature commit and update workboard.

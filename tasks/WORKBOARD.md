@@ -6,7 +6,7 @@
 ## 0. Focus Queue
 
 <!-- WORKBOARD:NOW:START -->
-- **[`261009-native-zip-handling`]** **RDD Contract**: `README.md` documents native `.zip` packaging and unpacking ergonomics. `ptbundle pack` outputs directly to a `.zip` archive when `-...
+- _No open tasks._
 <!-- WORKBOARD:NOW:END -->
 
 ## 1. Relationship Tree
@@ -30,6 +30,7 @@
 ## 3. Recent Closures
 
 <!-- WORKBOARD:CLOSED:START -->
+- **[`261009-native-zip-handling`]** - `uv run pytest`: 98 passed in 5.90s with 100.00% statement and branch coverage across all 10 modules in `src/ptbundle`
 - **[`260923-thin-plain-text-bundles`]** - `uv run pytest`: 90 passed in 5.10s with 100.00% statement and branch coverage across all 10 modules in `src/ptbundle`
 - **[`260923-plain-text-delta-engine`]** - `uv run pytest tests/test_delta.py --cov=ptbundle.delta` passes 11/11 tests with 100% statement and branch coverage (2
 - **[`260923-git-bundle-bridge`]** - `uv run pytest tests/test_bundle.py` passes 4/4 tests with 100.00% statement and branch coverage (105 statements, 36 b
@@ -39,5 +40,4 @@
 - **[`260922-pack-unpack-orchestrators`]** - `uv run pytest`: 55 passed in 1.46s with 100% line and branch coverage (`--cov-fail-under=100`).
 - **[`260922-inspection-quarantine-policy`]** - `uv run pytest`: 44 passed in 0.22s with 100% line and branch coverage (`--cov-fail-under=100`).
 - **[`260922-git-repo-io`]** - `uv run pytest`: 49 passed in 0.60s with 100% line and branch coverage (`--cov-fail-under=100`).
-- **[`260922-git-object-model`]** - `uv run pytest`: 27 passed in 0.18s with 100% line and branch coverage (`--cov-fail-under=100`).
 <!-- WORKBOARD:CLOSED:END -->
