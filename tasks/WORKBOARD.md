@@ -1,12 +1,12 @@
 # ptbundle Workboard
 
 > **Status:** Active Development
-> **Last Sync:** 2026-09-23
+> **Last Sync:** 2026-10-09
 
 ## 0. Focus Queue
 
 <!-- WORKBOARD:NOW:START -->
-- _No open tasks._
+- **[`261009-native-zip-handling`]** **RDD Contract**: `README.md` documents native `.zip` packaging and unpacking ergonomics. `ptbundle pack` outputs directly to a `.zip` archive when `-...
 <!-- WORKBOARD:NOW:END -->
 
 ## 1. Relationship Tree
